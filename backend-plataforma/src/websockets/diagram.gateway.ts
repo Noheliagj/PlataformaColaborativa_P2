@@ -103,10 +103,49 @@ export class DiagramGateway
     // conectado ahora mismo, lo que NotificationsService.notifyOwner()
     // guardó y emitió.
     this.notifications.on('notification', (notification: Notification) => {
-      this.server
-        .to(this.userRoom(notification.userId))
-        .emit('notification', notification);
+      if (!this.server) {
+        this.logger.warn(
+          `Notificación omitida por WebSocket (servidor aún no inicializado): ${notification.message}`,
+        );
+        return;
+      }
+      try {
+        this.server
+          .to(this.userRoom(notification.userId))
+          .emit('notification', notification);
+      } catch (err) {
+        this.logger.warn(
+          `Error al emitir notificación por WebSocket: ${(err as Error)?.message}`,
+        );
+      }
     });
+
+    // Notificaciones grupales emitidas a toda la sala del proyecto (web + móvil)
+    this.notifications.on(
+      'room-notification',
+      (payload: {
+        projectId: string;
+        type: string;
+        message: string;
+        userId: string;
+        userName: string;
+        timestamp: string;
+      }) => {
+        if (!this.server) return;
+        try {
+          this.server
+            .to(this.room(payload.projectId))
+            .emit('project-notification', payload);
+          this.server
+            .to(this.room(payload.projectId))
+            .emit('notification', payload);
+        } catch (err) {
+          this.logger.warn(
+            `Error al emitir notificación a la sala: ${(err as Error)?.message}`,
+          );
+        }
+      },
+    );
   }
 
   /**
@@ -118,6 +157,7 @@ export class DiagramGateway
    * quedara asignado, y el mensaje se perdería en silencio.
    */
   afterInit(server: Server): void {
+    this.server = server;
     server.use((socket: Socket, next: (err?: Error) => void) => {
       void (async () => {
         const isViewer =
@@ -300,7 +340,7 @@ export class DiagramGateway
         .addMessage(projectId, { content }, { id: userId, name: userName })
         .catch(() => {});
 
-      this.server.to(this.room(projectId)).emit('chat-message', message);
+      this.server?.to(this.room(projectId)).emit('chat-message', message);
     } catch {
       socket.emit('project-error', {
         message: 'No se pudo enviar el mensaje',
@@ -341,7 +381,7 @@ export class DiagramGateway
         );
 
       // Emitir el mensaje de usuario a la sala con identidad clara
-      this.server.to(this.room(projectId)).emit('chat-message', {
+      this.server?.to(this.room(projectId)).emit('chat-message', {
         id: `user-${Date.now()}`,
         projectId,
         userId,
@@ -367,7 +407,7 @@ export class DiagramGateway
         );
 
       // 4. Emitir el texto de respuesta de la IA al chat grupal de la sala mediante WebSockets
-      this.server.to(this.room(projectId)).emit('ai-chat-response', {
+      this.server?.to(this.room(projectId)).emit('ai-chat-response', {
         reply: result.reply,
         actions: result.actions,
         senderId: aiSender.id,
@@ -375,7 +415,7 @@ export class DiagramGateway
         timestamp: new Date().toISOString(),
       });
 
-      this.server.to(this.room(projectId)).emit('chat-message', {
+      this.server?.to(this.room(projectId)).emit('chat-message', {
         id: `ai-${Date.now()}`,
         projectId,
         userId: aiSender.id,
@@ -407,6 +447,12 @@ export class DiagramGateway
     model: DiagramModel,
     from: { userId: string; userName: string },
   ): void {
+    if (!this.server) {
+      this.logger.warn(
+        `No se pudo emitir diagram-update para proyecto ${projectId}: servidor WebSocket aún no disponible`,
+      );
+      return;
+    }
     this.server.to(this.room(projectId)).emit('diagram-update', {
       nodes: model.nodes,
       edges: model.edges,
@@ -417,6 +463,7 @@ export class DiagramGateway
 
   /** RF10: emite a toda la sala quién está conectado ahora mismo (sin duplicar por usuario). */
   private broadcastPresence(projectId: string): void {
+    if (!this.server) return;
     const room = this.presenceByProject.get(projectId);
     const byUserId = new Map<string, PresenceUser>();
     for (const user of room?.values() ?? []) {

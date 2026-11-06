@@ -376,8 +376,10 @@ export class AiService {
         max_tokens: 4096,
         system:
           'Eres un experto en UML. Analiza la imagen de un diagrama de clases (foto, captura o dibujo a mano) ' +
-          'y usa la herramienta "extraer_diagrama" para registrar exactamente lo que ves: no inventes clases, ' +
-          'atributos, métodos ni relaciones que no estén presentes en la imagen.',
+          'y usa la herramienta "extraer_diagrama" para registrar exactamente lo que ves: clases, ' +
+          'atributos, métodos, relaciones y la DISTRIBUCIÓN ESPACIAL de los elementos. ' +
+          'Estima las coordenadas (positionX, positionY) en píxeles aproximados (entre 80 y 900) para cada clase ' +
+          'según su ubicación en la imagen original, para que en el lienzo digital conserven la misma distribución espacial y no se amontonen.',
         messages: [
           {
             role: 'user',
@@ -392,7 +394,7 @@ export class AiService {
               },
               {
                 type: 'text',
-                text: 'Extrae todas las clases (con sus atributos y métodos) y todas las relaciones (con cardinalidad si es visible) de este diagrama de clases UML.',
+                text: 'Extrae todas las clases (con atributos, métodos y sus coordenadas estimadas positionX y positionY según su distribución espacial visual en la imagen) y todas las relaciones de este diagrama UML.',
               },
             ],
           },
@@ -472,13 +474,15 @@ export class AiService {
 El usuario o equipo te da instrucciones en lenguaje natural para crear o modificar clases, atributos, métodos y relaciones del lienzo.
 
 REGLAS DE ACTUACIÓN:
-1. Utiliza las herramientas (tools) disponibles para aplicar cambios reales en el modelo de datos. NUNCA respondas que hiciste un cambio sin haber llamado a la herramienta correspondiente.
+1. Utiliza las herramientas (tools) disponibles cuando el usuario pida crear o aplicar cambios en el modelo de datos. NUNCA respondas que hiciste un cambio sin haber llamado a la herramienta correspondiente.
    - "create_class": Para crear nuevas clases con atributos y métodos.
    - "create_relationship": Para vincular clases existentes con tipos UML y cardinalidades. Admite relaciones muchos a muchos ("0..*" a "0..*") y clases de asociación (intermedia).
    - "update_canvas": Para modificar elementos existentes (renombrar clases, añadir nuevos atributos o métodos).
-2. Si el usuario no especifica tipo de dato para un atributo, usa "String". Si no especifica tipo de retorno de un método, usa "void".
-3. Ten en cuenta el contexto de la conversación grupal y las decisiones previas de los usuarios.
-4. Responde siempre en español, de manera concisa y clara (en 1 o 2 frases), confirmando los cambios realizados o explicando por qué no se pudo ejecutar la acción solicitada.
+2. Si el usuario solicita AUDITAR el diagrama o detectar inconsistencias, revisa a fondo las clases existentes, atributos vacíos, relaciones huérfanas o errores de cardinalidad y presenta un diagnóstico claro con recomendaciones.
+3. Si el usuario solicita un RESUMEN DE AVANCES o se incorpora tarde, sintetiza de forma ejecutiva qué se ha modelado, qué cambios recientes se hicieron según el historial y qué tareas quedan pendientes.
+4. Si el usuario no especifica tipo de dato para un atributo, usa "String". Si no especifica tipo de retorno de un método, usa "void".
+5. Ten en cuenta el contexto de la conversación grupal y las decisiones previas de los usuarios.
+6. Responde siempre en español, de manera estructurada, concisa y profesional.
 
 ESTADO ACTUAL DEL CANVAS / DIAGRAMA:
 Clases existentes:

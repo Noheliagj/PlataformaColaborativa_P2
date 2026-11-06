@@ -147,6 +147,10 @@ export interface DiagramForXmi {
 export interface StructuredDiagramInput {
   classes: Array<{
     name: string;
+    positionX?: number;
+    positionY?: number;
+    x?: number;
+    y?: number;
     isAssociative?: boolean;
     attributes?: Array<{ name: string; type?: string }>;
     methods?: Array<{
@@ -551,20 +555,31 @@ export class ProjectsService {
       });
     }
 
+    const userWhoSaved = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    const saverName = userWhoSaved?.name ?? 'Un colaborador';
+
     // Notifica al dueño solo cuando el cambio lo hizo un colaborador — que
     // el propio dueño se autonotifique al guardar no aporta nada.
     if (userId !== project.ownerId) {
-      const collaborator = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { name: true },
-      });
       await this.notifications.notifyOwner({
         ownerId: project.ownerId,
         projectId: id,
         type: 'DIAGRAM_SAVED',
-        message: `${collaborator?.name ?? 'Un colaborador'} guardó cambios en "${project.name}"`,
+        message: `${saverName} guardó cambios en "${project.name}"`,
       });
     }
+
+    // Notificación en tiempo real a todos los colaboradores y visores conectados en la sala
+    this.notifications.notifyRoom({
+      projectId: id,
+      type: 'DIAGRAM_SAVED',
+      message: `${saverName} ha actualizado el diagrama`,
+      userId,
+      userName: saverName,
+    });
 
     return this.findOneAccessible(userId, id);
   }
@@ -787,6 +802,14 @@ export class ProjectsService {
             type: RelationshipType.ASSOCIATION,
             edgeStyle: EdgeStyle.ORTHOGONAL_SOFT,
             name: '«asociación»',
+          },
+        });
+
+        await tx.projectActivity.create({
+          data: {
+            projectId,
+            userId,
+            action: 'CREATE_ASSOCIATION_CLASS',
           },
         });
 
@@ -1086,14 +1109,39 @@ export class ProjectsService {
       await tx.classNode.deleteMany({ where: { diagramId: diagram.id } });
 
       const idByName = new Map<string, string>();
+      const placedPositions: Array<{ x: number; y: number }> = [];
+
       for (const [index, cls] of input.classes.entries()) {
         const name = cls.name?.trim() || `Clase${index + 1}`;
+        let posX: number;
+        let posY: number;
+
+        const rawX = cls.positionX ?? cls.x;
+        const rawY = cls.positionY ?? cls.y;
+
+        if (rawX !== undefined && rawY !== undefined && !isNaN(rawX) && !isNaN(rawY)) {
+          posX = Math.max(80, Math.round(rawX));
+          posY = Math.max(80, Math.round(rawY));
+
+          // Prevenir que clases se encimen o solapen en el lienzo
+          for (const placed of placedPositions) {
+            if (Math.abs(posX - placed.x) < 220 && Math.abs(posY - placed.y) < 150) {
+              posX = placed.x + 260;
+            }
+          }
+        } else {
+          posX = 80 + (index % GRID_COLS) * 260;
+          posY = 80 + Math.floor(index / GRID_COLS) * 220;
+        }
+
+        placedPositions.push({ x: posX, y: posY });
+
         const created = await tx.classNode.create({
           data: {
             diagramId: diagram.id,
             name,
-            positionX: 80 + (index % GRID_COLS) * 260,
-            positionY: 80 + Math.floor(index / GRID_COLS) * 220,
+            positionX: posX,
+            positionY: posY,
             isAssociative: Boolean(cls.isAssociative),
             attributes: {
               create: (cls.attributes ?? [])
@@ -1202,6 +1250,9 @@ export class ProjectsService {
         },
       },
     });
+    await this.prisma.projectActivity.create({
+      data: { projectId: id, userId, action: 'AI_CREATE_CLASS' },
+    }).catch(() => {});
     return { modelData: await this.getModelData(id), className: classRow.name };
   }
 
@@ -1223,6 +1274,9 @@ export class ProjectsService {
         orderIndex,
       },
     });
+    await this.prisma.projectActivity.create({
+      data: { projectId: id, userId, action: 'AI_ADD_ATTRIBUTE' },
+    }).catch(() => {});
     return { modelData: await this.getModelData(id) };
   }
 
@@ -1250,6 +1304,9 @@ export class ProjectsService {
         orderIndex,
       },
     });
+    await this.prisma.projectActivity.create({
+      data: { projectId: id, userId, action: 'AI_ADD_METHOD' },
+    }).catch(() => {});
     return { modelData: await this.getModelData(id) };
   }
 
@@ -1310,6 +1367,9 @@ export class ProjectsService {
         targetCardinality: input.targetCardinality?.trim() || null,
       },
     });
+    await this.prisma.projectActivity.create({
+      data: { projectId: id, userId, action: 'AI_CREATE_RELATIONSHIP' },
+    }).catch(() => {});
     return {
       modelData: await this.getModelData(id),
       summary: `Se creó la relación (${typeEnum}) entre "${source.name}" y "${target.name}".`,
@@ -1326,6 +1386,9 @@ export class ProjectsService {
     // Cascada: se borran también sus atributos/métodos y las relaciones
     // donde esta clase era origen o destino.
     await this.prisma.classNode.delete({ where: { id: classRow.id } });
+    await this.prisma.projectActivity.create({
+      data: { projectId: id, userId, action: 'AI_DELETE_CLASS' },
+    }).catch(() => {});
     return { modelData: await this.getModelData(id) };
   }
 

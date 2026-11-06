@@ -191,6 +191,16 @@ export const DIAGRAM_EXTRACTION_TOOL: Anthropic.Messages.Tool = {
           type: 'object',
           properties: {
             name: { type: 'string', description: 'Nombre de la clase (ej. Cliente).' },
+            positionX: {
+              type: 'number',
+              description:
+                'Coordenada horizontal estimada en píxeles (entre 80 y 950) según su ubicación en la imagen original.',
+            },
+            positionY: {
+              type: 'number',
+              description:
+                'Coordenada vertical estimada en píxeles (entre 80 y 850) según su ubicación en la imagen original.',
+            },
             attributes: {
               type: 'array',
               items: {

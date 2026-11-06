@@ -13,6 +13,8 @@ import {
   Plus,
   Sparkles,
   Sun,
+  Redo2,
+  Undo2,
 } from 'lucide-react';
 import type { Theme } from '../lib/theme';
 
@@ -28,6 +30,10 @@ interface EditorToolsPanelProps {
   exportingXmi: boolean;
   assistantOpen: boolean;
   chatOpen: boolean;
+  canUndo?: boolean;
+  onUndo?: () => void;
+  canRedo?: boolean;
+  onRedo?: () => void;
   onAddClass: () => void;
   onExportSpring: () => void;
   onExportImage: () => void;
@@ -108,6 +114,10 @@ export function EditorToolsPanel({
   exportingXmi,
   assistantOpen,
   chatOpen,
+  canUndo,
+  onUndo,
+  canRedo,
+  onRedo,
   onAddClass,
   onExportSpring,
   onExportImage,
@@ -170,6 +180,20 @@ export function EditorToolsPanel({
           label="Agregar clase"
           expanded={expanded}
           onClick={onAddClass}
+        />
+        <ToolButton
+          icon={<Undo2 size={16} />}
+          label="Deshacer (Ctrl+Z)"
+          expanded={expanded}
+          disabled={!canUndo}
+          onClick={onUndo || (() => {})}
+        />
+        <ToolButton
+          icon={<Redo2 size={16} />}
+          label="Rehacer (Ctrl+Y)"
+          expanded={expanded}
+          disabled={!canRedo}
+          onClick={onRedo || (() => {})}
         />
         <ToolButton
           icon={exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}

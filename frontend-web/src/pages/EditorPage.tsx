@@ -4,15 +4,17 @@ import {
   addEdge,
   Background,
   Controls,
+  Panel,
   reconnectEdge,
   ReactFlow,
+  SelectionMode,
   useEdgesState,
   useNodesState,
 } from '@xyflow/react';
-import type { Connection, Edge, Node } from '@xyflow/react';
+import type { Connection, Edge, EdgeChange, Node, NodeChange } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { Socket } from 'socket.io-client';
-import { AlertCircle, Check } from 'lucide-react';
+import { AlertCircle, BoxSelect, Check, MousePointer, Redo2, Undo2 } from 'lucide-react';
 import axios from 'axios';
 import { ClassNode, type ClassNodeData } from '../components/ClassNode';
 import { generateId } from '../services/id';
@@ -121,6 +123,174 @@ export function EditorPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selection, setSelection] = useState<Selection>(null);
 
+  // RF19: Pila de historial local para Deshacer (Undo) y Rehacer (Redo)
+  const undoStackRef = useRef<Array<{ nodes: ClassFlowNode[]; edges: Edge[] }>>([]);
+  const redoStackRef = useRef<Array<{ nodes: ClassFlowNode[]; edges: Edge[] }>>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const isHistoryActionRef = useRef(false);
+
+  // Modo de selección múltiple por área con el cursor (Marquee / Box selection)
+  const [isSelectMode, setIsSelectMode] = useState(false);
+
+  const pushUndoSnapshot = useCallback(() => {
+    if (isHistoryActionRef.current) return;
+    const snapshot = {
+      nodes: JSON.parse(JSON.stringify(nodes)) as ClassFlowNode[],
+      edges: JSON.parse(JSON.stringify(edges)) as Edge[],
+    };
+    undoStackRef.current.push(snapshot);
+    if (undoStackRef.current.length > 40) {
+      undoStackRef.current.shift();
+    }
+    setCanUndo(true);
+    // Toda nueva modificación del usuario descarta la pila de rehacer
+    redoStackRef.current = [];
+    setCanRedo(false);
+  }, [nodes, edges]);
+
+  const handleUndo = useCallback(() => {
+    const undoStack = undoStackRef.current;
+    if (undoStack.length === 0) return;
+
+    const previousSnapshot = undoStack.pop();
+    setCanUndo(undoStack.length > 0);
+    if (!previousSnapshot) return;
+
+    // Guardar el estado actual en la pila de rehacer antes de restaurar el previo
+    const currentSnapshot = {
+      nodes: JSON.parse(JSON.stringify(nodes)) as ClassFlowNode[],
+      edges: JSON.parse(JSON.stringify(edges)) as Edge[],
+    };
+    redoStackRef.current.push(currentSnapshot);
+    if (redoStackRef.current.length > 40) {
+      redoStackRef.current.shift();
+    }
+    setCanRedo(true);
+
+    isHistoryActionRef.current = true;
+    setNodes(previousSnapshot.nodes);
+    setEdges(previousSnapshot.edges);
+
+    if (selection?.kind === 'node' && !previousSnapshot.nodes.some((n) => n.id === selection.id)) {
+      setSelection(null);
+    }
+    if (selection?.kind === 'edge' && !previousSnapshot.edges.some((e) => e.id === selection.id)) {
+      setSelection(null);
+    }
+
+    setNotice('Cambio deshecho');
+
+    setTimeout(() => {
+      isHistoryActionRef.current = false;
+    }, 120);
+  }, [selection, nodes, edges, setNodes, setEdges]);
+
+  const handleRedo = useCallback(() => {
+    const redoStack = redoStackRef.current;
+    if (redoStack.length === 0) return;
+
+    const nextSnapshot = redoStack.pop();
+    setCanRedo(redoStack.length > 0);
+    if (!nextSnapshot) return;
+
+    // Guardar el estado actual en la pila de deshacer antes de avanzar
+    const currentSnapshot = {
+      nodes: JSON.parse(JSON.stringify(nodes)) as ClassFlowNode[],
+      edges: JSON.parse(JSON.stringify(edges)) as Edge[],
+    };
+    undoStackRef.current.push(currentSnapshot);
+    if (undoStackRef.current.length > 40) {
+      undoStackRef.current.shift();
+    }
+    setCanUndo(true);
+
+    isHistoryActionRef.current = true;
+    setNodes(nextSnapshot.nodes);
+    setEdges(nextSnapshot.edges);
+
+    if (selection?.kind === 'node' && !nextSnapshot.nodes.some((n) => n.id === selection.id)) {
+      setSelection(null);
+    }
+    if (selection?.kind === 'edge' && !nextSnapshot.edges.some((e) => e.id === selection.id)) {
+      setSelection(null);
+    }
+
+    setNotice('Cambio rehecho');
+
+    setTimeout(() => {
+      isHistoryActionRef.current = false;
+    }, 120);
+  }, [selection, nodes, edges, setNodes, setEdges]);
+
+  // Atajos de teclado globales:
+  // - Ctrl+Z / Cmd+Z (sin Shift): Deshacer
+  // - Ctrl+Y / Cmd+Y o Ctrl+Shift+Z / Cmd+Shift+Z: Rehacer
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const modifier = isMac ? e.metaKey : e.ctrlKey;
+
+      if (!modifier) return;
+
+      const key = e.key.toLowerCase();
+
+      // Deshacer: Ctrl+Z (sin Shift)
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // Rehacer: Ctrl+Y o Ctrl+Shift+Z
+      if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<ClassFlowNode>[]) => {
+      if (changes.some((c) => c.type === 'remove')) {
+        pushUndoSnapshot();
+      }
+      onNodesChange(changes);
+    },
+    [pushUndoSnapshot, onNodesChange],
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      if (changes.some((c) => c.type === 'remove')) {
+        pushUndoSnapshot();
+      }
+      onEdgesChange(changes);
+    },
+    [pushUndoSnapshot, onEdgesChange],
+  );
+
+  const onNodeDragStart = useCallback(() => {
+    pushUndoSnapshot();
+  }, [pushUndoSnapshot]);
+
+  const onSelectionDragStart = useCallback(() => {
+    pushUndoSnapshot();
+  }, [pushUndoSnapshot]);
+
   const [projectName, setProjectName] = useState('');
   const [role, setRole] = useState<ProjectRole | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,6 +328,8 @@ export function EditorPage() {
   const currentUser = getStoredUser();
   const currentUserId = currentUser?.id ?? null;
   const currentUserName = currentUser?.name ?? null;
+  const currentUserIdRef = useRef(currentUserId);
+  currentUserIdRef.current = currentUserId;
 
   // RF9: historial de guardados del diagrama.
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -345,12 +517,15 @@ export function EditorPage() {
       setError(payload.message || 'Error al comunicarse con el Asistente de IA');
     });
 
-    // Notificación para el dueño (colaborador se unió / guardó cambios),
-    // solo llega a este socket si está en su sala personal `user:{id}`
-    // (ver DiagramGateway.handleConnection). Reusa el toast de éxito que ya
-    // existe para 'notice'.
+    // Notificación en tiempo real para todos los colaboradores de la sala
     socket.on('notification', (payload: NotificationPayload) => {
-      setNotice(payload.message);
+      if (payload.userId && payload.userId === currentUserIdRef.current) return;
+      if (payload.message) setNotice(payload.message);
+    });
+
+    socket.on('project-notification', (payload: NotificationPayload) => {
+      if (payload.userId && payload.userId === currentUserIdRef.current) return;
+      if (payload.message) setNotice(payload.message);
     });
 
     return () => {
@@ -381,6 +556,7 @@ export function EditorPage() {
   // Las nuevas asociaciones usan el tipo 'customEdge' con anclajes inteligentes.
   const onConnect = useCallback(
     (conn: Connection) => {
+      pushUndoSnapshot();
       const sourceNode = nodes.find((n) => n.id === conn.source);
       const targetNode = nodes.find((n) => n.id === conn.target);
       const smart =
@@ -402,26 +578,30 @@ export function EditorPage() {
         ),
       );
     },
-    [nodes, setEdges],
+    [nodes, pushUndoSnapshot, setEdges],
   );
 
   // RF6: permite arrastrar el extremo de una relación YA EXISTENTE hacia
   // otro lado/handle de la misma clase o hacia otra clase, sin tener que
   // borrarla y crearla de nuevo.
   const onReconnect = useCallback(
-    (oldEdge: Edge, newConnection: Connection) =>
-      setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds)),
-    [setEdges],
+    (oldEdge: Edge, newConnection: Connection) => {
+      pushUndoSnapshot();
+      setEdges((eds) => reconnectEdge(oldEdge, newConnection, eds));
+    },
+    [pushUndoSnapshot, setEdges],
   );
 
   const addClass = useCallback(() => {
+    pushUndoSnapshot();
     setNodes((nds) => [...nds, createClassNode()]);
-  }, [setNodes]);
+  }, [pushUndoSnapshot, setNodes]);
 
   // RF6: cambios del panel lateral sobre la CLASE seleccionada, en vivo.
   const updateSelectedNode = useCallback(
     (patch: Partial<ClassNodeData>) => {
       if (selection?.kind !== 'node') return;
+      pushUndoSnapshot();
       const targetId = selection.id;
       setNodes((nds) =>
         nds.map((node) =>
@@ -431,7 +611,7 @@ export function EditorPage() {
         ),
       );
     },
-    [selection, setNodes],
+    [selection, pushUndoSnapshot, setNodes],
   );
 
   // RF7: convierte la relación N:M seleccionada en una clase asociativa UML.
@@ -439,6 +619,7 @@ export function EditorPage() {
   // 2. La clase asociativa se coloca debajo y se conecta mediante una línea auxiliar punteada (estilo UML).
   const convertEdgeToAssociativeClass = useCallback(() => {
     if (selection?.kind !== 'edge') return;
+    pushUndoSnapshot();
     const targetId = selection.id;
     const edge = edges.find((e) => e.id === targetId);
     if (!edge) return;
@@ -498,12 +679,13 @@ export function EditorPage() {
       auxEdge,
     ]);
     setSelection({ kind: 'node', id: associativeNode.id });
-  }, [selection, edges, nodes, setNodes, setEdges]);
+  }, [selection, pushUndoSnapshot, edges, nodes, setNodes, setEdges]);
 
   // RF6: cambios del panel lateral sobre la ASOCIACIÓN seleccionada, en vivo.
   const updateSelectedEdge = useCallback(
     (patch: Partial<ClassEdgeData>) => {
       if (selection?.kind !== 'edge') return;
+      pushUndoSnapshot();
       const targetId = selection.id;
       const currentEdge = edges.find((e) => e.id === targetId);
       if (!currentEdge) return;
@@ -536,13 +718,14 @@ export function EditorPage() {
         }, 50);
       }
     },
-    [selection, edges, convertEdgeToAssociativeClass, setEdges],
+    [selection, pushUndoSnapshot, edges, convertEdgeToAssociativeClass, setEdges],
   );
 
   // RF7: botón "Invertir Dirección" del panel de propiedades — intercambia
   // origen/destino y las cardinalidades/roles correspondientes.
   const reverseSelectedEdge = useCallback(() => {
     if (selection?.kind !== 'edge') return;
+    pushUndoSnapshot();
     const targetId = selection.id;
     setEdges((eds) =>
       eds.map((edge) => {
@@ -564,7 +747,7 @@ export function EditorPage() {
         };
       }),
     );
-  }, [selection, setEdges]);
+  }, [selection, pushUndoSnapshot, setEdges]);
 
   // RF5: guarda el estado actual (solo lo esencial) en el backend.
   const handleSave = useCallback(async () => {
@@ -653,6 +836,7 @@ export function EditorPage() {
       setError(null);
       setNotice(null);
       try {
+        pushUndoSnapshot();
         const result = await importDiagramFromImage(id, file);
         setNotice(result.summary);
       } catch (err) {
@@ -744,6 +928,7 @@ export function EditorPage() {
       setError(null);
       setNotice(null);
       try {
+        pushUndoSnapshot();
         const result = await importProjectXmi(id, file);
         if (result.modelData?.nodes?.length) {
           applyingRemoteRef.current = true;
@@ -882,6 +1067,10 @@ export function EditorPage() {
             exportingXmi={exportingXmi}
             assistantOpen={assistantOpen}
             chatOpen={chatOpen}
+            canUndo={canUndo}
+            onUndo={handleUndo}
+            canRedo={canRedo}
+            onRedo={handleRedo}
             onAddClass={addClass}
             onExportSpring={handleExportSpring}
             onToggleAssistant={() => setAiMode(true)}
@@ -914,17 +1103,54 @@ export function EditorPage() {
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onNodeDragStart={onNodeDragStart}
+            onSelectionDragStart={onSelectionDragStart}
             onConnect={onConnect}
             onReconnect={onReconnect}
             edgesReconnectable
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             defaultEdgeOptions={{ type: 'customEdge' }}
-            onNodeClick={(_, node) => setSelection({ kind: 'node', id: node.id })}
+            selectionMode={SelectionMode.Partial}
+            panOnDrag={isSelectMode ? [1, 2] : true}
+            selectionOnDrag={isSelectMode}
+            selectionKeyCode={['Shift', 'Control', 'Meta']}
+            multiSelectionKeyCode={['Control', 'Shift', 'Meta']}
+            selectNodesOnDrag={false}
+            nodesDraggable
+            elementsSelectable
+            onNodeClick={(event, node) => {
+              if (event.ctrlKey || event.shiftKey || event.metaKey) {
+                setSelection(null);
+                setNodes((nds) =>
+                  nds.map((n) =>
+                    n.id === node.id ? { ...n, selected: !n.selected } : n,
+                  ),
+                );
+              } else {
+                setSelection({ kind: 'node', id: node.id });
+              }
+            }}
+            onNodeDoubleClick={(event, node) => {
+              event.stopPropagation();
+              setSelection(null);
+              setNodes((nds) =>
+                nds.map((n) =>
+                  n.id === node.id ? { ...n, selected: !n.selected } : n,
+                ),
+              );
+            }}
             onEdgeClick={(_, edge) => setSelection({ kind: 'edge', id: edge.id })}
-            onPaneClick={() => setSelection(null)}
+            onPaneClick={() => {
+              setSelection(null);
+              setNodes((nds) =>
+                nds.some((n) => n.selected)
+                  ? nds.map((n) => ({ ...n, selected: false }))
+                  : nds,
+              );
+            }}
             colorMode={theme}
             fitView
             connectionRadius={40}
@@ -935,6 +1161,62 @@ export function EditorPage() {
               size={1.5}
             />
             <Controls />
+
+            {/* Barra de herramientas flotante avanzada en el lienzo: Deshacer + Selección Múltiple */}
+            <Panel position="top-left" className="m-3">
+              <div className="flex items-center gap-1.5 rounded-xl border border-hairline-strong bg-surface/90 p-1.5 shadow-xl backdrop-blur-md">
+                {/* Botón de Deshacer */}
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  title="Deshacer último cambio en el lienzo (Ctrl+Z)"
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-all hover:bg-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Undo2 size={15} />
+                  <span>Deshacer</span>
+                </button>
+
+                {/* Botón de Rehacer */}
+                <button
+                  type="button"
+                  onClick={handleRedo}
+                  disabled={!canRedo}
+                  title="Rehacer cambio en el lienzo (Ctrl+Y o Ctrl+Shift+Z)"
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-all hover:bg-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Redo2 size={15} />
+                  <span>Rehacer</span>
+                </button>
+
+                <div className="h-4 w-px bg-hairline-strong" />
+
+                {/* Alternar Selección por Área con el cursor */}
+                <button
+                  type="button"
+                  onClick={() => setIsSelectMode((prev) => !prev)}
+                  title={
+                    isSelectMode
+                      ? 'Modo Selección por Área activo (Arrastra el cursor para seleccionar clases). Clic para volver a mover lienzo'
+                      : 'Activar Selección por área con cursor (o mantén Shift/Ctrl pulsado al arrastrar)'
+                  }
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-all ${
+                    isSelectMode
+                      ? 'bg-accent text-white shadow-sm shadow-accent/30'
+                      : 'text-ink-soft hover:bg-raised hover:text-ink'
+                  }`}
+                >
+                  {isSelectMode ? <BoxSelect size={15} /> : <MousePointer size={15} />}
+                  <span>{isSelectMode ? 'Seleccionando área' : 'Seleccionar área'}</span>
+                </button>
+
+                {nodes.filter((n) => n.selected).length > 1 && (
+                  <span className="animate-fade-rise ml-1 rounded-md bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-hi">
+                    {nodes.filter((n) => n.selected).length} clases seleccionadas • Arrastra para mover en grupo
+                  </span>
+                )}
+              </div>
+            </Panel>
           </ReactFlow>
 
           {selectedNode && (

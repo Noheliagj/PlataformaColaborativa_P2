@@ -5,10 +5,12 @@ import {
   Check,
   ChevronLeft,
   Cpu,
+  FileText,
   Loader2,
   Mic,
   MicOff,
   Send,
+  ShieldAlert,
   Sparkles,
   User,
   Wand2,
@@ -126,6 +128,22 @@ export function AiWorkspacePanel({
     onSendMessage(promptText);
   }
 
+  const AUDIT_PROMPT =
+    'Por favor, audita el diagrama de clases UML actual: analiza si existen clases sin atributos o métodos esenciales, relaciones huérfanas, errores de cardinalidad o inconsistencias teóricas de modelado UML, y propón las correcciones o mejoras pertinentes.';
+
+  const SUMMARY_PROMPT =
+    'Por favor, genera un resumen ejecutivo y claro de los avances del equipo en este proyecto: qué clases y relaciones se han creado o modificado recientemente y cuáles son las tareas o aspectos pendientes del modelado.';
+
+  function handleAudit() {
+    if (isProcessing) return;
+    onSendMessage(AUDIT_PROMPT);
+  }
+
+  function handleSummary() {
+    if (isProcessing) return;
+    onSendMessage(SUMMARY_PROMPT);
+  }
+
   function toggleVoice() {
     if (listening) {
       recognitionRef.current?.stop();
@@ -211,9 +229,44 @@ export function AiWorkspacePanel({
               </p>
             </div>
 
-            <div className="pt-2 text-left space-y-1.5">
+            <div className="pt-2 text-left space-y-2.5">
               <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider px-1">
-                Sugerencias rápidas:
+                Comandos rápidos del equipo:
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleAudit}
+                  disabled={isProcessing}
+                  className="flex flex-col items-start gap-1 rounded-xl border border-purple-500/35 bg-purple-950/20 p-2.5 text-left transition-all hover:border-purple-400 hover:bg-purple-900/30 disabled:opacity-50 shadow-sm"
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-purple-300">
+                    <ShieldAlert size={14} className="text-purple-400" />
+                    <span>Auditar Diagrama</span>
+                  </div>
+                  <span className="text-[10px] text-ink-muted leading-tight">
+                    Detecta clases vacías o inconsistencias UML
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSummary}
+                  disabled={isProcessing}
+                  className="flex flex-col items-start gap-1 rounded-xl border border-sky-500/35 bg-sky-950/20 p-2.5 text-left transition-all hover:border-sky-400 hover:bg-sky-900/30 disabled:opacity-50 shadow-sm"
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-300">
+                    <FileText size={14} className="text-sky-400" />
+                    <span>Resumen de Avances</span>
+                  </div>
+                  <span className="text-[10px] text-ink-muted leading-tight">
+                    Síntesis ejecutiva para los integrantes
+                  </span>
+                </button>
+              </div>
+
+              <p className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider px-1 pt-1">
+                Modelado en lenguaje natural:
               </p>
               <div className="space-y-1.5">
                 {QUICK_PROMPTS.map((prompt) => (
@@ -346,6 +399,31 @@ export function AiWorkspacePanel({
             Reconectando Socket.IO con el servidor…
           </div>
         )}
+
+        {/* Comandos rápidos especializados: Auditar y Resumen de Avances */}
+        <div className="mb-2.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          <button
+            type="button"
+            onClick={handleAudit}
+            disabled={isProcessing}
+            title="Auditar el diagrama en busca de inconsistencias o relaciones huérfanas"
+            className="flex items-center gap-1.5 shrink-0 rounded-lg border border-purple-500/35 bg-purple-500/10 px-2.5 py-1 text-[11px] font-semibold text-purple-300 transition-all hover:bg-purple-500/20 hover:border-purple-500/60 hover:text-purple-100 disabled:opacity-40 shadow-xs"
+          >
+            <ShieldAlert size={13} className="text-purple-400" />
+            <span>Auditar Diagrama</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSummary}
+            disabled={isProcessing}
+            title="Generar un resumen ejecutivo de los avances del equipo en la sala"
+            className="flex items-center gap-1.5 shrink-0 rounded-lg border border-sky-500/35 bg-sky-500/10 px-2.5 py-1 text-[11px] font-semibold text-sky-300 transition-all hover:bg-sky-500/20 hover:border-sky-500/60 hover:text-sky-100 disabled:opacity-40 shadow-xs"
+          >
+            <FileText size={13} className="text-sky-400" />
+            <span>Resumen de Avances</span>
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
           {voiceSupported && (

@@ -1139,6 +1139,7 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
   List<UmlClass> _classes = [];
   List<UmlEdge> _edges = [];
   final List<ActivityEvent> _activities = [];
+  final Set<String> _recentNotificationIds = {};
   String _lastUpdated = '';
   String _searchQuery = '';
 
@@ -1149,9 +1150,26 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
     _connectSocket();
   }
 
+  void _disconnectSocket() {
+    if (_socket != null) {
+      try {
+        if (_socket!.connected) {
+          _socket!.emit('leave-room', {'projectId': widget.project.id});
+          _socket!.emit('leave-project', {'projectId': widget.project.id});
+        }
+        _socket!.clearListeners();
+        _socket!.disconnect();
+        _socket!.dispose();
+      } catch (e) {
+        debugPrint("Error cerrando socket del proyecto ${widget.project.id}: $e");
+      }
+      _socket = null;
+    }
+  }
+
   @override
   void dispose() {
-    _socket?.dispose();
+    _disconnectSocket();
     _transformationController.dispose();
     _tabController.dispose();
     super.dispose();
@@ -1170,9 +1188,151 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
     });
   }
 
+  void _showFloatingBanner({
+    required String title,
+    required String message,
+    IconData icon = Icons.notifications_active_outlined,
+    Color accentColor = const Color(0xFF38BDF8),
+  }) {
+    if (!mounted) return;
+    try {
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          duration: const Duration(seconds: 4),
+          content: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A).withOpacity(0.96),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: accentColor.withOpacity(0.55),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: accentColor.withOpacity(0.25),
+                  blurRadius: 16,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 4),
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: accentColor, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          letterSpacing: 0.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        message,
+                        style: TextStyle(
+                          color: Colors.grey.shade300,
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint("Error al mostrar banner flotante: $e");
+    }
+  }
+
+  void _handleIncomingNotification(dynamic data) {
+    if (!mounted) return;
+    try {
+      Map<String, dynamic> payload = {};
+      if (data is Map<String, dynamic>) {
+        payload = data;
+      } else if (data is String) {
+        payload = jsonDecode(data);
+      }
+
+      final id = payload['id']?.toString() ??
+          "${payload['type']}_${payload['message']}_${payload['createdAt']}";
+      if (_recentNotificationIds.contains(id)) return;
+      _recentNotificationIds.add(id);
+      if (_recentNotificationIds.length > 50) {
+        _recentNotificationIds.remove(_recentNotificationIds.first);
+      }
+
+      final title = payload['title']?.toString() ?? 'Notificación del Proyecto';
+      final message = payload['message']?.toString() ??
+          payload['content']?.toString() ??
+          'Actualización del equipo';
+      final type = payload['type']?.toString() ?? 'INFO';
+
+      IconData icon = Icons.notifications_active_outlined;
+      Color accentColor = const Color(0xFF38BDF8);
+
+      if (type == 'DIAGRAM_SAVED') {
+        icon = Icons.save_outlined;
+        accentColor = const Color(0xFF10B981);
+      } else if (type == 'AI_UPDATE' || type.contains('AI')) {
+        icon = Icons.auto_awesome_rounded;
+        accentColor = const Color(0xFFA855F7);
+      } else if (type == 'WARNING' || type == 'ERROR') {
+        icon = Icons.warning_amber_rounded;
+        accentColor = const Color(0xFFF59E0B);
+      }
+
+      _showFloatingBanner(
+        title: title,
+        message: message,
+        icon: icon,
+        accentColor: accentColor,
+      );
+
+      _addActivity(title, message, isAi: type.contains('AI'));
+    } catch (e) {
+      debugPrint("Error al procesar notificación: $e");
+    }
+  }
+
   void _connectSocket() {
-    _socket?.dispose();
-    _socket = null;
+    _disconnectSocket();
 
     setState(() {
       _status = ConnectionStatus.connecting;
@@ -1199,6 +1359,16 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
         });
         _addActivity('Conectado a la sala', 'Enlace en tiempo real activo con NestJS');
         // Unirse a la sala del proyecto
+        socket.emit('join-room', {'projectId': widget.project.id});
+        socket.emit('join-project', {'projectId': widget.project.id});
+      });
+
+      socket.onReconnect((_) {
+        if (!mounted) return;
+        setState(() {
+          _status = ConnectionStatus.connected;
+        });
+        _addActivity('Reconectado a la sala', 'Sesión sincronizada');
         socket.emit('join-room', {'projectId': widget.project.id});
         socket.emit('join-project', {'projectId': widget.project.id});
       });
@@ -1236,6 +1406,16 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
         } catch (_) {}
       });
 
+      socket.on('project-notification', (data) {
+        if (!mounted) return;
+        _handleIncomingNotification(data);
+      });
+
+      socket.on('notification', (data) {
+        if (!mounted) return;
+        _handleIncomingNotification(data);
+      });
+
       socket.onDisconnect((_) {
         if (!mounted) return;
         setState(() => _status = ConnectionStatus.disconnected);
@@ -1256,6 +1436,7 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
   }
 
   void _handleDiagramUpdate(dynamic data) {
+    if (!mounted) return;
     try {
       Map<String, dynamic> payload = {};
       if (data is Map<String, dynamic>) {
@@ -1316,6 +1497,15 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
         'Por: $fromUser (${newClasses.length} clases, ${newEdges.length} relaciones)',
         isAi: isAi,
       );
+
+      if (payload['isInitial'] != true) {
+        _showFloatingBanner(
+          title: 'Lienzo Actualizado',
+          message: 'Por: $fromUser (${newClasses.length} clases, ${newEdges.length} relaciones)',
+          icon: isAi ? Icons.auto_awesome_rounded : Icons.hub_outlined,
+          accentColor: isAi ? const Color(0xFFA855F7) : const Color(0xFF38BDF8),
+        );
+      }
     } catch (e) {
       debugPrint("Error parseando diagram-update: $e");
     }
@@ -1375,6 +1565,8 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
           indicatorColor: const Color(0xFF38BDF8),
           labelColor: const Color(0xFF38BDF8),
           unselectedLabelColor: const Color(0xFF64748B),
+          labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+          unselectedLabelStyle: const TextStyle(fontSize: 11),
           tabs: [
             const Tab(icon: Icon(Icons.draw_outlined, size: 18), text: 'PIZARRA'),
             Tab(icon: const Icon(Icons.view_agenda_outlined, size: 18), text: 'TARJETAS (${_classes.length})'),
@@ -1533,18 +1725,19 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
               transformationController: _transformationController,
               constrained: false, // Permite que el lienzo se expanda libremente más allá del viewport
               clipBehavior: Clip.none, // Evita que se corte la pizarra o los nodos en los bordes
-              boundaryMargin: const EdgeInsets.all(3500), // Navegación táctil libre en cualquier dirección
+              boundaryMargin: const EdgeInsets.all(4000), // Navegación táctil libre en cualquier dirección
               minScale: 0.15,
               maxScale: 3.5,
               child: SizedBox(
-                width: 3500,
-                height: 3500,
+                width: 4000,
+                height: 4000,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
                     // Conexiones y aristas dibujadas con CustomPaint
                     Positioned.fill(
                       child: CustomPaint(
+                        size: const Size(4000, 4000),
                         painter: DiagramCanvasPainter(
                           classes: _classes,
                           edges: _edges,
@@ -1634,8 +1827,7 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
         onTap: () => _showClassDetailModal(cls),
         child: Container(
           constraints: const BoxConstraints(
-            minHeight: 140,
-            maxHeight: 340,
+            minHeight: 110,
           ),
           decoration: BoxDecoration(
             color: const Color(0xFF0F172A),
@@ -1670,15 +1862,19 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          isAssoc ? '«ASOCIACIÓN N:M»' : '«CLASE»',
-                          style: TextStyle(
-                            color: isAssoc ? const Color(0xFFC084FC) : const Color(0xFF94A3B8),
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
+                        Expanded(
+                          child: Text(
+                            isAssoc ? '«ASOCIACIÓN N:M»' : '«CLASE»',
+                            style: TextStyle(
+                              color: isAssoc ? const Color(0xFFC084FC) : const Color(0xFF94A3B8),
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 4),
                         Icon(
                           isAssoc ? Icons.hub_rounded : Icons.category_rounded,
                           color: isAssoc ? const Color(0xFFC084FC) : const Color(0xFF38BDF8),
@@ -1878,32 +2074,40 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
     final connected = _getConnectedEdges(cls.id);
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF0F172A),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         side: BorderSide(color: Color(0xFF334155)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF475569),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+        final screenHeight = MediaQuery.of(ctx).size.height;
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: screenHeight * 0.85),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF475569),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: _buildClassCard(cls, connected),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: _buildClassCard(cls, connected),
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },
@@ -1993,17 +2197,26 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
   }
 
   Widget _buildMetricItem(String val, String label, Color color) {
-    return Column(
-      children: [
-        Text(val, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 2),
-        Text(label.toUpperCase(), style: const TextStyle(color: Color(0xFF6B7280), fontSize: 9, fontWeight: FontWeight.bold)),
-      ],
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(val, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w800)),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(label.toUpperCase(), style: const TextStyle(color: Color(0xFF6B7280), fontSize: 8.5, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildMetricDivider() {
-    return Container(width: 1, height: 24, color: const Color(0xFF1F2937));
+    return Container(width: 1, height: 22, margin: const EdgeInsets.symmetric(horizontal: 2), color: const Color(0xFF1F2937));
   }
 
   Widget _buildClassCard(UmlClass item, List<UmlEdge> connectedEdges) {
@@ -2036,8 +2249,10 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
                   child: Text(
                     item.className,
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 8),
                 if (isAssoc)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -2089,9 +2304,27 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
                               style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Color(0xFF38BDF8), fontSize: 13),
                             ),
                             const SizedBox(width: 6),
-                            Text(attr.name, style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 13, fontWeight: FontWeight.w500)),
-                            const Text(' : ', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                            Text(attr.type, style: const TextStyle(fontFamily: 'monospace', color: Color(0xFFA5F3FC), fontSize: 12)),
+                            Expanded(
+                              child: RichText(
+                                overflow: TextOverflow.ellipsis,
+                                text: TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: attr.name,
+                                      style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 13, fontWeight: FontWeight.w500),
+                                    ),
+                                    const TextSpan(
+                                      text: ' : ',
+                                      style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                                    ),
+                                    TextSpan(
+                                      text: attr.type,
+                                      style: const TextStyle(fontFamily: 'monospace', color: Color(0xFFA5F3FC), fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       )),
@@ -2125,13 +2358,26 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
                             ),
                             const SizedBox(width: 6),
                             Expanded(
-                              child: Text(
-                                '${method.name}(${method.paramsString})',
-                                style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 13, fontWeight: FontWeight.w500),
+                              child: RichText(
+                                overflow: TextOverflow.ellipsis,
+                                text: TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: '${method.name}(${method.paramsString})',
+                                      style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 13, fontWeight: FontWeight.w500),
+                                    ),
+                                    const TextSpan(
+                                      text: ' : ',
+                                      style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                                    ),
+                                    TextSpan(
+                                      text: method.returnType,
+                                      style: const TextStyle(fontFamily: 'monospace', color: Color(0xFFFED7AA), fontSize: 12),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                            const Text(' : ', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                            Text(method.returnType, style: const TextStyle(fontFamily: 'monospace', color: Color(0xFFFED7AA), fontSize: 12)),
                           ],
                         ),
                       )),

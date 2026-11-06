@@ -14,6 +14,14 @@ interface NotifyOwnerInput {
   message: string;
 }
 
+export interface RoomNotificationInput {
+  projectId: string;
+  type: string;
+  message: string;
+  userId: string;
+  userName: string;
+}
+
 /**
  * Notificaciones push para el dueño de un proyecto (colaborador se unió o
  * guardó cambios). No conoce Socket.IO: emite un evento Node
@@ -68,6 +76,17 @@ export class NotificationsService extends EventEmitter {
     await this.sendWebPush(input.ownerId, notification);
 
     return notification;
+  }
+
+  /**
+   * Notificación para todos los colaboradores de la sala del proyecto
+   * (ej. cuando alguien guarda manualmente el diagrama).
+   */
+  notifyRoom(input: RoomNotificationInput): void {
+    this.emit('room-notification', {
+      ...input,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   async saveSubscription(

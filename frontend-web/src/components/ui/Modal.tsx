@@ -6,6 +6,7 @@ interface ModalProps {
   open: boolean;
   title: string;
   description?: string;
+  maxWidth?: string;
   onClose: () => void;
   children: ReactNode;
 }
@@ -15,6 +16,7 @@ export function Modal({
   open,
   title,
   description,
+  maxWidth = 'max-w-md',
   onClose,
   children,
 }: ModalProps) {
@@ -35,7 +37,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className="animate-fade-rise w-full max-w-md overflow-hidden rounded-xl border border-hairline-strong bg-surface shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)]"
+        className={`animate-fade-rise w-full ${maxWidth} overflow-hidden rounded-xl border border-hairline-strong bg-surface shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)]`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-hairline px-5 py-4">

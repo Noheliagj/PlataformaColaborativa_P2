@@ -47,11 +47,14 @@ export interface AiChatResponsePayload {
  * `user:{userId}` -- ver DiagramGateway y NotificationsService.
  */
 export interface NotificationPayload {
-  id: string;
-  type: 'MEMBER_JOINED' | 'DIAGRAM_SAVED';
+  id?: string;
+  type?: string;
   message: string;
-  projectId: string;
-  createdAt: string;
+  projectId?: string;
+  userId?: string;
+  userName?: string;
+  createdAt?: string;
+  timestamp?: string;
 }
 
 /**
