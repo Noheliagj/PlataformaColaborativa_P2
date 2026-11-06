@@ -16,6 +16,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NosqlService } from '../nosql/nosql.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectModelDto } from './dto/update-project-model.dto';
 import { JoinProjectDto } from './dto/join-project.dto';
@@ -252,6 +253,7 @@ export class ProjectsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly nosql: NosqlService,
   ) {}
 
   async create(ownerId: string, dto: CreateProjectDto): Promise<Project> {
@@ -906,13 +908,46 @@ export class ProjectsService {
       take: limit,
       include: { user: { select: { id: true, name: true } } },
     });
-    return messages.reverse().map((message) => ({
+
+    const result: ChatMessageEntry[] = messages.reverse().map((message) => ({
       id: message.id,
       content: message.content,
       createdAt: message.createdAt,
       projectId: message.projectId,
       user: message.user,
     }));
+
+    // Sesiones Continuas: Recuperar e integrar mensajes persistidos en MongoDB (ChatRoom NoSQL),
+    // asegurando que las respuestas de la IA y el hilo grupal compartido no se pierdan al día siguiente.
+    try {
+      const room = await this.nosql.getChatHistory(id);
+      if (room?.messages?.length) {
+        for (const m of room.messages) {
+          const alreadyExists = result.some(
+            (r) =>
+              r.content === m.content &&
+              Math.abs(new Date(r.createdAt).getTime() - new Date(m.timestamp).getTime()) < 4000,
+          );
+          if (!alreadyExists) {
+            result.push({
+              id: `nosql-${new Date(m.timestamp).getTime()}-${Math.random().toString(36).slice(2, 6)}`,
+              content: m.content,
+              createdAt: m.timestamp,
+              projectId: id,
+              user: {
+                id: m.senderId,
+                name: m.senderName,
+              },
+            });
+          }
+        }
+        result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      }
+    } catch {
+      // Fallback transparente al resultado de PostgreSQL
+    }
+
+    return result.slice(-limit);
   }
 
   /**
@@ -1370,13 +1405,45 @@ export class ProjectsService {
     return { modelData: await this.getModelData(id), summary };
   }
 
-  /** Diagrama del proyecto (dueño o colaborador), ya listo para React Flow. */
+  /** Diagrama del proyecto (dueño o colaborador), ya listo para React Flow y visores móviles. */
   async getModelData(projectId: string): Promise<DiagramModel> {
     const diagram = await this.prisma.diagram.findUnique({
       where: { projectId },
       include: DIAGRAM_INCLUDE,
     });
-    return diagram ? this.toDiagramModel(diagram) : { nodes: [], edges: [] };
+    const pgModel = diagram ? this.toDiagramModel(diagram) : { nodes: [], edges: [] };
+
+    // Sesiones Continuas: Recuperar snapshot del lienzo desde MongoDB NoSQL si existe,
+    // restaurando las posiciones en vivo de los nodos editados o desplazados en sesiones previas.
+    try {
+      const room = await this.nosql.getChatHistory(projectId);
+      const snapshot = room?.canvasStateSnapshot as
+        | { nodes?: Array<{ id: string; position?: { x: number; y: number } }>; edges?: unknown[] }
+        | undefined;
+
+      if (snapshot && Array.isArray(snapshot.nodes) && snapshot.nodes.length > 0) {
+        if (pgModel.nodes.length === 0) {
+          return snapshot as unknown as DiagramModel;
+        }
+
+        const posMap = new Map<string, { x: number; y: number }>();
+        for (const n of snapshot.nodes) {
+          if (n?.id && n.position) {
+            posMap.set(n.id, n.position);
+          }
+        }
+        for (const node of pgModel.nodes) {
+          const pos = posMap.get(node.id);
+          if (pos) {
+            node.position = pos;
+          }
+        }
+      }
+    } catch {
+      // Respaldo transparente en pgModel si NoSQL no está disponible
+    }
+
+    return pgModel;
   }
 
   /** Valida acceso y devuelve el Diagram del proyecto (siempre existe, ver create()). */
