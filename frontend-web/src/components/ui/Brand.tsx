@@ -10,7 +10,7 @@ export function Brand({
   return (
     <div className="flex items-center gap-2.5">
       <span
-        className={`relative grid shrink-0 place-items-center rounded-[10px] border border-hairline-strong bg-raised text-accent-hi ${
+        className={`relative grid shrink-0 place-items-center rounded-[10px] border border-sky-500/40 bg-gradient-to-br from-[#0f172a] to-[#1e293b] text-sky-400 shadow-[0_0_16px_rgba(56,189,248,0.22)] ${
           lg ? 'h-10 w-10' : 'h-8 w-8'
         }`}
       >

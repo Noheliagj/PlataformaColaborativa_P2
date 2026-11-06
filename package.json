@@ -1,0 +1,17 @@
+{
+  "name": "plataforma-colaborativa-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo root scripts para Backend, Frontend Web y Cliente Móvil",
+  "scripts": {
+    "dev": "npm --prefix frontend-web run dev",
+    "dev:frontend": "npm --prefix frontend-web run dev",
+    "start:dev": "npm --prefix backend-plataforma run start:dev",
+    "dev:backend": "npm --prefix backend-plataforma run start:dev",
+    "build:backend": "npm --prefix backend-plataforma run build",
+    "build:frontend": "npm --prefix frontend-web run build",
+    "build": "npm --prefix backend-plataforma run build && npm --prefix frontend-web run build",
+    "flutter:chrome": "cd mobile_flutter && flutter run -d chrome"
+  }
+}
+

@@ -38,18 +38,18 @@ export type ClassEdgeData = {
 };
 
 const LABEL_CLASS =
-  'absolute select-none whitespace-nowrap rounded-md border border-hairline-strong ' +
-  'bg-surface px-1.5 py-0.5 text-[10px] font-medium text-ink shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6)] ' +
-  'pointer-events-auto';
+  'absolute select-none whitespace-nowrap rounded-lg border border-sky-500/40 ' +
+  'bg-[#0f172a]/95 px-2.5 py-1 text-[11px] font-bold text-sky-300 shadow-[0_0_15px_rgba(56,189,248,0.25)] ' +
+  'backdrop-blur-md pointer-events-auto';
 
 const CARD_CLASS =
-  'absolute select-none whitespace-nowrap rounded border border-hairline-strong ' +
-  'bg-raised px-1 py-px font-mono text-[10px] text-ink-soft ' +
-  'pointer-events-auto';
+  'absolute select-none whitespace-nowrap rounded-md border border-white/15 ' +
+  'bg-[#131b2e]/95 px-1.5 py-0.5 font-mono text-[10px] font-bold text-sky-400 shadow-[0_2px_10px_rgba(0,0,0,0.6)] ' +
+  'backdrop-blur-md pointer-events-auto';
 
 const ROLE_CLASS =
-  'absolute select-none whitespace-nowrap rounded border border-hairline ' +
-  'bg-sunken px-1 py-px text-[9px] italic text-ink-faint ' +
+  'absolute select-none whitespace-nowrap rounded-md border border-white/10 ' +
+  'bg-[#0b0f19]/90 px-1.5 py-0.5 text-[9px] italic text-slate-300 shadow-sm ' +
   'pointer-events-auto';
 
 /** Calcula el trazo (path) + punto de etiqueta según el estilo elegido. */
@@ -196,19 +196,25 @@ export function CustomEdge({
   const tgtRoleX = effectiveSourceX + (targetX - effectiveSourceX) * 0.68;
   const tgtRoleY = effectiveSourceY + (targetY - effectiveSourceY) * 0.68;
 
-  const stroke = selected ? '#7c86e6' : '#6b6d78';
-  const strokeWidth = selected ? 2 : 1.5;
+  const stroke = selected ? '#38bdf8' : isAuxiliary ? '#a855f7' : '#94a3b8';
+  const strokeWidth = selected ? 2.5 : isAuxiliary ? 2 : 1.8;
+  const filter = selected
+    ? 'drop-shadow(0 0 6px rgba(56, 189, 248, 0.7))'
+    : isAuxiliary
+      ? 'drop-shadow(0 0 6px rgba(168, 85, 247, 0.5))'
+      : undefined;
+
   const lineStyle: React.CSSProperties =
     relationType === 'REALIZATION' || relationType === 'DEPENDENCY' || isAuxiliary
-      ? { ...DASHED, stroke, strokeWidth }
-      : { ...SOLID, stroke, strokeWidth };
+      ? { ...DASHED, stroke, strokeWidth, filter }
+      : { ...SOLID, stroke, strokeWidth, filter };
 
   const angleDeg =
     (Math.atan2(targetY - effectiveSourceY, targetX - effectiveSourceX) * 180) / Math.PI;
 
   // Relleno "hueco" de rombo/triángulo: el color de fondo del lienzo, para
   // que se vea como un hueco y no como una forma sólida del color de línea.
-  const holeFill = 'var(--color-surface, #16171b)';
+  const holeFill = '#0f172a';
 
   let sourceIcon: React.ReactNode = null;
   let targetIcon: React.ReactNode = null;

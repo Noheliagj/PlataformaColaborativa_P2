@@ -68,7 +68,7 @@ interface PresenceUser {
 @WebSocketGateway({
   namespace: '/diagram',
   cors: {
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    origin: '*',
     credentials: true,
   },
 })
@@ -118,9 +118,20 @@ export class DiagramGateway
   afterInit(server: Server): void {
     server.use((socket: Socket, next: (err?: Error) => void) => {
       void (async () => {
+        const isViewer =
+          socket.handshake.query?.role === 'viewer' ||
+          socket.handshake.auth?.role === 'viewer';
+
         try {
           const token = this.extractToken(socket);
-          if (!token) throw new Error('Falta el token');
+          if (!token) {
+            if (isViewer) {
+              socket.data.userId = `viewer-${socket.id}`;
+              socket.data.userName = 'Visor Móvil';
+              return next();
+            }
+            throw new Error('Falta el token');
+          }
 
           const payload = this.jwt.verify<JwtPayload>(token);
           const user = await this.users.findById(payload.sub);
@@ -130,6 +141,11 @@ export class DiagramGateway
           socket.data.userName = user.name;
           next();
         } catch {
+          if (isViewer) {
+            socket.data.userId = `viewer-${socket.id}`;
+            socket.data.userName = 'Visor Móvil';
+            return next();
+          }
           next(new Error('No autorizado'));
         }
       })();
@@ -170,7 +186,9 @@ export class DiagramGateway
     if (!userId || !userName || !body?.projectId) return;
 
     try {
-      await this.projects.getAccessibleOrThrow(userId, body.projectId);
+      if (!userId.startsWith('viewer-')) {
+        await this.projects.getAccessibleOrThrow(userId, body.projectId);
+      }
     } catch {
       socket.emit('project-error', {
         message: 'No tienes acceso a este proyecto',
@@ -189,7 +207,31 @@ export class DiagramGateway
       .set(socket.id, { userId, userName });
 
     socket.emit('joined-project', { projectId: body.projectId });
+    socket.emit('joined-room', { projectId: body.projectId });
     this.broadcastPresence(body.projectId);
+
+    // Enviar inmediatamente el estado actual del diagrama al cliente recién conectado (ej. visor móvil)
+    try {
+      const currentModel = await this.projects.getModelData(body.projectId);
+      if (currentModel) {
+        socket.emit('diagram-update', {
+          nodes: currentModel.nodes,
+          edges: currentModel.edges,
+          isInitial: true,
+        });
+      }
+    } catch (err) {
+      this.logger.debug(`No se pudo emitir modelo inicial para ${body.projectId}: ${err}`);
+    }
+  }
+
+  /** Alias para clientes móviles o externos que emitan `join-room`. */
+  @SubscribeMessage('join-room')
+  async onJoinRoom(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: JoinProjectPayload,
+  ): Promise<void> {
+    return this.onJoinProject(socket, body);
   }
 
   /**
@@ -392,7 +434,9 @@ export class DiagramGateway
 
   private extractToken(socket: Socket): string | null {
     const fromAuth = socket.handshake.auth?.token as string | undefined;
-    if (fromAuth) return fromAuth;
+    if (fromAuth) {
+      return fromAuth.startsWith('Bearer ') ? fromAuth.slice(7) : fromAuth;
+    }
     const header = socket.handshake.headers.authorization;
     if (header?.startsWith('Bearer ')) return header.slice('Bearer '.length);
     return null;

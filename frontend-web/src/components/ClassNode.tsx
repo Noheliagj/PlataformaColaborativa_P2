@@ -24,129 +24,95 @@ export function ClassNode({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`min-w-[212px] overflow-hidden rounded-lg border bg-surface font-sans text-[11px] text-ink-soft shadow-[0_10px_30px_-12px_rgba(0,0,0,0.7)] transition-colors ${
+      className={`min-w-[220px] overflow-hidden rounded-xl border font-sans text-[11px] shadow-2xl transition-all duration-200 ${
         selected
-          ? 'border-accent ring-2 ring-accent-soft'
+          ? 'border-sky-400 ring-4 ring-sky-500/25 shadow-[0_0_30px_rgba(56,189,248,0.3)] bg-[#0f172a]'
           : isAssociative
-            ? 'border-dashed border-accent-hi/70'
-            : 'border-hairline-strong'
+            ? 'border-purple-500/80 shadow-[0_0_20px_rgba(168,85,247,0.25)] bg-[#131b2e]'
+            : 'border-slate-800 bg-[#0f172a] hover:border-slate-700 shadow-black/60'
       }`}
     >
-      {/* RF6: un handle de entrada y uno de salida en cada uno de los 4
-          lados, para poder conectar/soltar relaciones desde cualquier
-          costado de la clase (no solo arriba/abajo). isConnectableStart/
-          End en true en los cuatro para poder arrastrar la línea a partir
-          de cualquiera de ellos, sea "source" o "target". */}
-      <Handle
-        id="top-target"
-        type="target"
-        position={Position.Top}
-        className={HANDLE_CLASS}
-        isConnectableStart
-        isConnectableEnd
-      />
-      <Handle
-        id="top-source"
-        type="source"
-        position={Position.Top}
-        className={HANDLE_CLASS}
-        isConnectableStart
-        isConnectableEnd
-      />
-      <Handle
-        id="right-target"
-        type="target"
-        position={Position.Right}
-        className={HANDLE_CLASS}
-        isConnectableStart
-        isConnectableEnd
-      />
-      <Handle
-        id="right-source"
-        type="source"
-        position={Position.Right}
-        className={HANDLE_CLASS}
-        isConnectableStart
-        isConnectableEnd
-      />
-      <Handle
-        id="left-target"
-        type="target"
-        position={Position.Left}
-        className={HANDLE_CLASS}
-        isConnectableStart
-        isConnectableEnd
-      />
-      <Handle
-        id="left-source"
-        type="source"
-        position={Position.Left}
-        className={HANDLE_CLASS}
-        isConnectableStart
-        isConnectableEnd
-      />
+      {/* Handles */}
+      <Handle id="top-target" type="target" position={Position.Top} className={HANDLE_CLASS} isConnectableStart isConnectableEnd />
+      <Handle id="top-source" type="source" position={Position.Top} className={HANDLE_CLASS} isConnectableStart isConnectableEnd />
+      <Handle id="right-target" type="target" position={Position.Right} className={HANDLE_CLASS} isConnectableStart isConnectableEnd />
+      <Handle id="right-source" type="source" position={Position.Right} className={HANDLE_CLASS} isConnectableStart isConnectableEnd />
+      <Handle id="left-target" type="target" position={Position.Left} className={HANDLE_CLASS} isConnectableStart isConnectableEnd />
+      <Handle id="left-source" type="source" position={Position.Left} className={HANDLE_CLASS} isConnectableStart isConnectableEnd />
 
-      {/* Cabecera */}
-      <div className="relative border-b border-hairline-strong bg-raised px-3 py-2 text-center">
-        <span className="absolute inset-y-0 left-0 w-[3px] bg-accent" />
-        <span className="block font-mono text-[9px] tracking-[0.14em] text-ink-faint uppercase">
-          {isAssociative ? '«association class»' : '«class»'}
-        </span>
-        <span className="block text-[13px] font-semibold text-ink">
+      {/* Cabecera de la Clase */}
+      <div
+        className={`relative px-3.5 py-2.5 text-center border-b ${
+          isAssociative
+            ? 'bg-gradient-to-r from-purple-950/80 via-indigo-950/70 to-purple-950/80 border-purple-500/40'
+            : 'bg-gradient-to-r from-slate-900 via-slate-800/90 to-slate-900 border-white/10'
+        }`}
+      >
+        <span
+          className={`absolute inset-y-0 left-0 w-1 ${
+            isAssociative
+              ? 'bg-gradient-to-b from-purple-400 to-pink-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]'
+              : 'bg-gradient-to-b from-sky-400 to-blue-500 shadow-[0_0_8px_rgba(56,189,248,0.8)]'
+          }`}
+        />
+
+        <div className="mb-1 flex items-center justify-center">
+          {isAssociative ? (
+            <span className="inline-flex items-center rounded-full border border-purple-400/50 bg-purple-500/20 px-2 py-0.5 text-[9px] font-bold tracking-wider text-purple-300 uppercase shadow-[0_0_10px_rgba(168,85,247,0.3)]">
+              ⚡ Clase Asociativa (N:M)
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full border border-sky-400/40 bg-sky-500/15 px-2 py-0.5 text-[9px] font-bold tracking-wider text-sky-300 uppercase">
+              «Clase UML»
+            </span>
+          )}
+        </div>
+
+        <span className="block text-[14px] font-extrabold tracking-tight text-white drop-shadow-sm">
           {name ?? 'NuevaClase'}
         </span>
       </div>
 
       {/* Atributos */}
-      <ul className="space-y-1 px-3 py-2 font-mono">
-        {attributes && attributes.length > 0 ? (
-          attributes.map((attr, i) => (
-            <li
-              key={i}
-              className="flex gap-1.5 whitespace-nowrap text-ink-soft"
-            >
-              <span className="text-accent-hi">−</span>
-              {attr}
-            </li>
-          ))
-        ) : (
-          <li className="text-ink-faint italic">sin atributos</li>
-        )}
-      </ul>
+      <div className="px-3.5 py-2.5 bg-[#0b0f19]/60">
+        <span className="block text-[9px] font-bold tracking-wider text-slate-400 uppercase mb-1.5">
+          Atributos ({attributes?.length ?? 0})
+        </span>
+        <ul className="space-y-1 font-mono text-[11px]">
+          {attributes && attributes.length > 0 ? (
+            attributes.map((attr, i) => (
+              <li key={i} className="flex items-center gap-1.5 whitespace-nowrap text-slate-200">
+                <span className="font-bold text-sky-400">−</span>
+                <span className="font-medium text-slate-100">{attr}</span>
+              </li>
+            ))
+          ) : (
+            <li className="text-slate-500 italic text-[10px]">sin atributos</li>
+          )}
+        </ul>
+      </div>
 
       {/* Métodos */}
-      <ul className="space-y-1 border-t border-hairline px-3 py-2 font-mono">
-        {methods && methods.length > 0 ? (
-          methods.map((method, i) => (
-            <li
-              key={i}
-              className="flex gap-1.5 whitespace-nowrap text-ink-soft"
-            >
-              <span className="text-positive">+</span>
-              {method}
-            </li>
-          ))
-        ) : (
-          <li className="text-ink-faint italic">sin métodos</li>
-        )}
-      </ul>
+      <div className="px-3.5 py-2.5 border-t border-white/5 bg-[#0b0f19]/90">
+        <span className="block text-[9px] font-bold tracking-wider text-slate-400 uppercase mb-1.5">
+          Métodos ({methods?.length ?? 0})
+        </span>
+        <ul className="space-y-1 font-mono text-[11px]">
+          {methods && methods.length > 0 ? (
+            methods.map((method, i) => (
+              <li key={i} className="flex items-center gap-1.5 whitespace-nowrap text-slate-200">
+                <span className="font-bold text-emerald-400">+</span>
+                <span className="font-medium text-slate-100">{method}</span>
+              </li>
+            ))
+          ) : (
+            <li className="text-slate-500 italic text-[10px]">sin métodos</li>
+          )}
+        </ul>
+      </div>
 
-      <Handle
-        id="bottom-target"
-        type="target"
-        position={Position.Bottom}
-        className={HANDLE_CLASS}
-        isConnectableStart
-        isConnectableEnd
-      />
-      <Handle
-        id="bottom-source"
-        type="source"
-        position={Position.Bottom}
-        className={HANDLE_CLASS}
-        isConnectableStart
-        isConnectableEnd
-      />
+      <Handle id="bottom-target" type="target" position={Position.Bottom} className={HANDLE_CLASS} isConnectableStart isConnectableEnd />
+      <Handle id="bottom-source" type="source" position={Position.Bottom} className={HANDLE_CLASS} isConnectableStart isConnectableEnd />
     </div>
   );
 }

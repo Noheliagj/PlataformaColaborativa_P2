@@ -34,7 +34,8 @@ export class AuthService {
 
   /** RF2: valida credenciales y devuelve un token JWT. */
   async login(dto: LoginDto): Promise<AuthResult> {
-    const user = await this.users.findByEmail(dto.email);
+    const cleanEmail = (dto.email ?? '').trim();
+    const user = await this.users.findByEmail(cleanEmail);
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
     }

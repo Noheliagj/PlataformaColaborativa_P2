@@ -8,3 +8,10 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 *.log
+*.tsbuildinfo
+.expo/
+.expo-shared/
+.dart_tool/
+**/build/
+.flutter-plugins
+.flutter-plugins-dependencies

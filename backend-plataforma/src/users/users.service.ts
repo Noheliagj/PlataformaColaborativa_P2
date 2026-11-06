@@ -19,8 +19,19 @@ export class UsersService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  findByEmail(email: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { email } });
+  async findByEmail(email: string): Promise<User | null> {
+    const clean = (email ?? '').trim();
+    if (!clean) return null;
+    const exact = await this.prisma.user.findUnique({ where: { email: clean } });
+    if (exact) return exact;
+    return this.prisma.user.findFirst({
+      where: {
+        email: {
+          equals: clean,
+          mode: 'insensitive',
+        },
+      },
+    });
   }
 
   findById(id: string): Promise<User | null> {

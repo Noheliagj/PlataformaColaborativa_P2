@@ -905,7 +905,7 @@ export function EditorPage() {
         )}
 
         {/* Lienzo */}
-        <div className="relative flex-1">
+        <div className="relative flex-1 bg-[#0b0f19]">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -922,16 +922,12 @@ export function EditorPage() {
             onPaneClick={() => setSelection(null)}
             colorMode={theme}
             fitView
-            // RF6: radio de conexión más generoso -- al arrastrar una
-            // relación ya no hace falta soltarla justo sobre el puntito del
-            // handle, basta con soltarla cerca de cualquier parte de la
-            // clase para que React Flow la conecte al handle más cercano.
             connectionRadius={40}
           >
             <Background
-              color={theme === 'dark' ? '#1b1c20' : '#dcdce0'}
-              gap={22}
-              size={1}
+              color={theme === 'dark' ? '#334155' : '#cbd5e1'}
+              gap={26}
+              size={1.5}
             />
             <Controls />
           </ReactFlow>

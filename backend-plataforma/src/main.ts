@@ -22,9 +22,9 @@ async function bootstrap() {
     );
   }
 
-  // Permite que el frontend web (Vite dev server) consuma la API.
+  // Permite que el frontend web y clientes móviles (Expo / React Native) consuman la API.
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    origin: true,
     credentials: true,
   });
 

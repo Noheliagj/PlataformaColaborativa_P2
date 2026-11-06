@@ -1371,7 +1371,7 @@ export class ProjectsService {
   }
 
   /** Diagrama del proyecto (dueño o colaborador), ya listo para React Flow. */
-  private async getModelData(projectId: string): Promise<DiagramModel> {
+  async getModelData(projectId: string): Promise<DiagramModel> {
     const diagram = await this.prisma.diagram.findUnique({
       where: { projectId },
       include: DIAGRAM_INCLUDE,

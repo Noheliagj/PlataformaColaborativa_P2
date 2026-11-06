@@ -336,21 +336,27 @@ export function HomePage() {
               return (
                 <article
                   key={project.id}
-                  className="group relative flex flex-col overflow-hidden rounded-xl border border-hairline bg-surface p-5 transition-colors hover:border-hairline-strong"
+                  className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#131b2e] to-[#0f172a] p-6 shadow-xl transition-all duration-300 hover:border-sky-500/50 hover:shadow-[0_0_30px_rgba(56,189,248,0.18)] hover:-translate-y-1"
                 >
-                  <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                  <span className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-sky-400 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <h3 className="truncate text-[15px] font-semibold text-ink">
-                        {project.name}
-                      </h3>
-                      {!isOwner && (
-                        <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent-hi">
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate text-[16px] font-bold text-white tracking-tight">
+                          {project.name}
+                        </h3>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                            isOwner
+                              ? 'border border-sky-500/40 bg-sky-500/15 text-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.2)]'
+                              : 'border border-purple-500/40 bg-purple-500/15 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
+                          }`}
+                        >
                           <Users size={10} />
-                          Colaborador
+                          {isOwner ? 'Dueño' : 'Colaborador'}
                         </span>
-                      )}
+                      </div>
                     </div>
                     <div className="-mt-1 -mr-1 flex shrink-0 items-center gap-0.5">
                       {isOwner && (
@@ -358,13 +364,13 @@ export function HomePage() {
                           type="button"
                           onClick={() => handleCopyInvite(project)}
                           disabled={inviteBusyId === project.id}
-                          className="rounded-md p-1.5 text-ink-faint transition-colors hover:bg-raised hover:text-ink disabled:opacity-50"
+                          className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
                           title="Copiar enlace de invitación y código"
                         >
                           {copiedId === project.id ? (
-                            <Check size={15} className="text-positive" />
+                            <Check size={16} className="text-emerald-400" />
                           ) : (
-                            <Link2 size={15} />
+                            <Link2 size={16} />
                           )}
                         </button>
                       )}
@@ -373,30 +379,30 @@ export function HomePage() {
                           type="button"
                           onClick={() => handleDelete(project.id)}
                           disabled={deletingId === project.id}
-                          className="rounded-md p-1.5 text-ink-faint transition-colors hover:bg-critical-soft hover:text-critical disabled:opacity-50"
+                          className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-rose-500/20 hover:text-rose-400 disabled:opacity-50"
                           title="Eliminar proyecto"
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={16} />
                         </button>
                       )}
                     </div>
                   </div>
 
-                  <p className="mt-1.5 line-clamp-2 min-h-[2.5rem] text-[13px] text-ink-muted">
+                  <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-[13px] text-slate-300">
                     {project.description || 'Sin descripción.'}
                   </p>
 
-                  <div className="mt-4 flex items-center gap-1.5 text-[11px] text-ink-faint">
-                    <Clock size={13} />
+                  <div className="mt-4 flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
+                    <Clock size={13} className="text-sky-400" />
                     Actualizado {formatDate(project.updatedAt)}
                   </div>
 
                   <button
                     type="button"
                     onClick={() => navigate(`/projects/${project.id}/editor`)}
-                    className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-hairline-strong bg-raised px-4 py-2 text-[13px] font-medium text-ink-soft transition-colors group-hover:border-accent group-hover:bg-accent group-hover:text-white"
+                    className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl border border-sky-500/40 bg-gradient-to-r from-sky-600 to-blue-600 px-4 py-2.5 text-[13px] font-bold text-white shadow-[0_0_18px_rgba(56,189,248,0.22)] transition-all group-hover:from-sky-500 group-hover:to-blue-500 group-hover:shadow-[0_0_24px_rgba(56,189,248,0.4)]"
                   >
-                    Abrir en el editor
+                    Abrir en el editor en vivo
                     <ArrowRight size={15} />
                   </button>
                 </article>

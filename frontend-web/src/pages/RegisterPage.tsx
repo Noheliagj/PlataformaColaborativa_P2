@@ -49,16 +49,19 @@ export function RegisterPage() {
 
   return (
     <AuthShell>
-      <div className="mb-7 space-y-1.5">
-        <h1 className="text-xl font-semibold text-ink">Crea tu cuenta</h1>
-        <p className="text-sm text-ink-muted">
-          Empieza a modelar tu software en minutos.
+      <div className="mb-6 flex flex-col items-center text-center">
+        <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl border-2 border-indigo-500/50 bg-[#131b2e] text-indigo-400 shadow-[0_0_25px_rgba(168,85,247,0.3)]">
+          <User size={26} className="text-indigo-400" />
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-white">Crea tu cuenta</h1>
+        <p className="mt-1 text-sm text-slate-400">
+          Empieza a modelar tu software y colaborar en minutos
         </p>
       </div>
 
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-critical/40 bg-critical-soft px-3 py-2.5 text-[13px] text-critical">
+          <div className="flex items-start gap-2 rounded-lg border border-critical/40 bg-critical-soft px-3.5 py-2.5 text-[13px] text-critical shadow-[0_0_15px_rgba(239,68,68,0.15)]">
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>
@@ -106,11 +109,11 @@ export function RegisterPage() {
 
         <Button
           type="submit"
-          className="mt-1 w-full"
+          className="mt-2 w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-sky-600 text-white font-bold shadow-[0_0_20px_rgba(168,85,247,0.35)] hover:from-indigo-500 hover:to-sky-500 transition-all duration-200"
           loading={loading}
           icon={!loading && <ArrowRight size={16} />}
         >
-          {loading ? 'Creando…' : 'Crear cuenta'}
+          {loading ? 'Creando cuenta…' : 'Crear mi cuenta'}
         </Button>
       </form>
 
