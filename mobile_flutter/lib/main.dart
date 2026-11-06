@@ -1231,7 +1231,8 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
         if (!mounted) return;
         try {
           final reply = data['reply'] ?? data['message'] ?? 'Acción ejecutada';
-          _addActivity('Asistente IA (Claude)', reply.toString(), isAi: true);
+          final sender = data['senderName'] ?? 'Asistente UML';
+          _addActivity(sender.toString(), reply.toString(), isAi: true);
         } catch (_) {}
       });
 
@@ -1302,8 +1303,14 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
         });
       }
 
-      final isAi = fromUser.toString().toLowerCase().contains('ia') ||
-          fromUser.toString().toLowerCase().contains('claude');
+      final fromLower = fromUser.toString().toLowerCase();
+      final isAi = fromLower.contains('asistente') ||
+          fromLower.contains('bot') ||
+          fromLower == 'ia' ||
+          fromLower == 'ai' ||
+          fromLower.startsWith('ia ') ||
+          fromLower.startsWith('ai-') ||
+          fromLower.contains('claude');
       _addActivity(
         'Actualización del Lienzo',
         'Por: $fromUser (${newClasses.length} clases, ${newEdges.length} relaciones)',

@@ -155,7 +155,9 @@ export function EditorPage() {
   // Chat en tiempo real entre colaboradores conectados al proyecto.
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ProjectChatMessage[]>([]);
-  const currentUserId = getStoredUser()?.id ?? null;
+  const currentUser = getStoredUser();
+  const currentUserId = currentUser?.id ?? null;
+  const currentUserName = currentUser?.name ?? null;
 
   // RF9: historial de guardados del diagrama.
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -677,7 +679,7 @@ export function EditorPage() {
     [id],
   );
 
-  // Modo IA: envía la instrucción a la IA (Claude) por WebSocket (evento ai-chat-message)
+  // Modo IA: envía la instrucción a la IA Colaborativa (Asistente UML) por WebSocket (evento ai-chat-message)
   const handleSendAiMessage = useCallback(
     (content: string) => {
       const trimmed = content.trim();
@@ -688,6 +690,8 @@ export function EditorPage() {
         socketRef.current.emit('ai-chat-message', {
           projectId: id,
           content: trimmed,
+          userId: currentUserId || undefined,
+          userName: currentUserName || undefined,
         });
       } else {
         // Fallback REST si Socket.io estuviera temporalmente desconectado
@@ -701,7 +705,7 @@ export function EditorPage() {
                 content: res.reply,
                 createdAt: new Date().toISOString(),
                 projectId: id,
-                user: { id: 'ai-assistant', name: 'Asistente IA (Claude)' },
+                user: { id: 'ai-assistant', name: 'Asistente UML' },
                 actions: res.actions,
               },
             ]);
@@ -712,7 +716,7 @@ export function EditorPage() {
           });
       }
     },
-    [id, aiProcessing],
+    [id, aiProcessing, currentUserId, currentUserName],
   );
 
   // RF12: descarga el diagrama actual como .xmi (XMI 2.1).
@@ -896,6 +900,7 @@ export function EditorPage() {
               projectId={id ?? ''}
               messages={chatMessages}
               currentUserId={currentUserId}
+              currentUserName={currentUserName}
               connected={socketConnected}
               isProcessing={aiProcessing}
               onSendMessage={handleSendAiMessage}

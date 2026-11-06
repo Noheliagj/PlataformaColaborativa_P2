@@ -929,6 +929,10 @@ export class ProjectsService {
               Math.abs(new Date(r.createdAt).getTime() - new Date(m.timestamp).getTime()) < 4000,
           );
           if (!alreadyExists) {
+            const isAi =
+              m.senderId === 'ai-assistant' ||
+              m.senderName?.includes('Claude') ||
+              m.senderName?.includes('Asistente');
             result.push({
               id: `nosql-${new Date(m.timestamp).getTime()}-${Math.random().toString(36).slice(2, 6)}`,
               content: m.content,
@@ -936,7 +940,7 @@ export class ProjectsService {
               projectId: id,
               user: {
                 id: m.senderId,
-                name: m.senderName,
+                name: isAi ? 'Asistente UML' : m.senderName,
               },
             });
           }

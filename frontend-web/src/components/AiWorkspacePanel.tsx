@@ -19,6 +19,7 @@ interface AiWorkspacePanelProps {
   projectId: string;
   messages: ProjectChatMessage[];
   currentUserId: string | null;
+  currentUserName?: string | null;
   connected: boolean;
   isProcessing: boolean;
   onSendMessage: (content: string) => void;
@@ -86,6 +87,7 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
 export function AiWorkspacePanel({
   messages,
   currentUserId,
+  currentUserName,
   connected,
   isProcessing,
   onSendMessage,
@@ -170,7 +172,7 @@ export function AiWorkspacePanel({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-[13px] font-bold text-ink tracking-tight">
-                Modo IA Colaborativo
+                IA Colaborativa
               </h2>
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -178,7 +180,7 @@ export function AiWorkspacePanel({
               </span>
             </div>
             <p className="text-[11px] text-ink-muted">
-              Claude Sonnet • Tool Calling UML
+              Asistente UML • Tool Calling en Vivo
             </p>
           </div>
         </div>
@@ -233,9 +235,12 @@ export function AiWorkspacePanel({
         {messages.map((msg) => {
           const isAi =
             msg.user?.id === 'ai-assistant' ||
-            msg.user?.name?.toLowerCase().includes('ia') ||
-            msg.user?.name?.toLowerCase().includes('claude');
-          const isOwn = msg.user?.id === currentUserId && !isAi;
+            msg.user?.id?.startsWith('ai-') ||
+            msg.user?.name === 'Asistente UML' ||
+            msg.user?.name === 'IA Colaborativa' ||
+            msg.user?.name?.startsWith('Asistente') ||
+            Boolean(msg.user?.name?.toLowerCase().includes('claude'));
+          const isOwn = !isAi && Boolean(currentUserId && msg.user?.id === currentUserId);
 
           return (
             <div
@@ -249,12 +254,12 @@ export function AiWorkspacePanel({
                 {isAi ? (
                   <span className="flex items-center gap-1 rounded-md bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 text-purple-400 font-semibold shadow-xs">
                     <Bot size={12} className="text-purple-400" />
-                    [IA - Claude]
+                    [Asistente UML]
                   </span>
                 ) : isOwn ? (
-                  <span className="text-ink-muted flex items-center gap-1">
+                  <span className="text-accent-hi flex items-center gap-1 font-semibold">
                     <User size={11} />
-                    [Tú]
+                    [{msg.user?.name || currentUserName || 'Tú'}]
                   </span>
                 ) : (
                   <span
@@ -318,7 +323,7 @@ export function AiWorkspacePanel({
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-[12px] font-semibold text-accent-hi">
-                  Claude procesando petición…
+                  Asistente UML procesando petición…
                 </span>
                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-accent animate-ping" />
               </div>

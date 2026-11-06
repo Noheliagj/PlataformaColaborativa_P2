@@ -40,6 +40,8 @@ interface AiChatMessagePayload {
   projectId: string;
   content?: string;
   message?: string;
+  userId?: string;
+  userName?: string;
 }
 
 /** RF10: quién está conectado ahora mismo a la sala de un proyecto. */
@@ -308,16 +310,17 @@ export class DiagramGateway
 
   /**
    * Manejo de evento WebSocket `ai-chat-message` para interacción en tiempo real
-   * con el Asistente de IA (Claude) y sincronización NoSQL.
+   * con el Asistente UML (IA Colaborativa) y sincronización NoSQL.
    */
   @SubscribeMessage('ai-chat-message')
   async onAiChatMessage(
     @ConnectedSocket() socket: Socket,
     @MessageBody() body: AiChatMessagePayload,
   ): Promise<void> {
-    const userId = socket.data.userId as string | undefined;
-    const userName = socket.data.userName as string | undefined;
-    const projectId = socket.data.projectId as string | undefined;
+    const userId = (socket.data.userId as string | undefined) || body?.userId;
+    const userName =
+      (socket.data.userName as string | undefined) || body?.userName || 'Colaborador';
+    const projectId = (socket.data.projectId as string | undefined) || body?.projectId;
     const content = (body?.content || body?.message)?.trim();
 
     if (!userId || !userName || !projectId || projectId !== body?.projectId) {
@@ -337,7 +340,7 @@ export class DiagramGateway
           this.logger.warn(`No se pudo persistir mensaje de usuario en NoSQL: ${err.message}`),
         );
 
-      // Emitir el mensaje de usuario a la sala
+      // Emitir el mensaje de usuario a la sala con identidad clara
       this.server.to(this.room(projectId)).emit('chat-message', {
         id: `user-${Date.now()}`,
         projectId,
@@ -348,11 +351,11 @@ export class DiagramGateway
         createdAt: new Date().toISOString(),
       });
 
-      // 2. Consultar la API de Anthropic con el contexto y herramientas
+      // 2. Consultar la API de IA con el contexto y herramientas
       const result = await this.aiService.chat(userId, userName, projectId, content);
 
       // 3. Guardar la respuesta de la IA en MongoDB NoSQL
-      const aiSender = { id: 'ai-assistant', name: 'Asistente IA (Claude)' };
+      const aiSender = { id: 'ai-assistant', name: 'Asistente UML' };
       await this.nosql
         .addMessage(
           projectId,
