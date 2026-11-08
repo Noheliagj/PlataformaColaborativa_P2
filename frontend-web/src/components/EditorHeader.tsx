@@ -95,32 +95,32 @@ export function EditorHeader({
   onOpenHistory,
 }: EditorHeaderProps) {
   return (
-    <header className="z-20 flex items-center justify-between gap-4 border-b border-white/10 bg-[#0f172a]/90 px-4 py-2.5 backdrop-blur-xl shadow-md">
+    <header className="z-20 flex items-center justify-between gap-4 border-b border-hairline bg-surface/90 px-4 py-2.5 backdrop-blur-xl shadow-sm">
       <div className="flex min-w-0 items-center gap-2.5">
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-[#1e293b] px-2.5 py-1.5 text-[12px] font-semibold text-slate-200 transition-all hover:bg-white/10 hover:text-white"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-raised px-2.5 py-1.5 text-[12px] font-semibold text-ink-soft transition-all hover:bg-overlay hover:text-ink"
         >
           <ArrowLeft size={14} /> Proyectos
         </button>
 
-        <span className="h-5 w-px bg-white/10" />
+        <span className="h-5 w-px bg-hairline" />
 
         <div className="flex min-w-0 items-center gap-2.5">
-          <h1 className="truncate text-[14px] font-bold text-white tracking-tight">
+          <h1 className="truncate text-[14px] font-bold text-ink tracking-tight">
             {projectName || 'Editor UML'}
           </h1>
-          <span className="hidden items-center gap-1.5 rounded-full border border-white/10 bg-[#131b2e] px-2.5 py-0.5 text-[11px] text-slate-300 sm:inline-flex shadow-sm">
+          <span className="hidden items-center gap-1.5 rounded-full border border-hairline bg-sunken px-2.5 py-0.5 text-[11px] text-ink-muted sm:inline-flex shadow-sm">
             {statusMeta.spin ? (
-              <Loader2 size={11} className="animate-spin text-sky-400" />
+              <Loader2 size={11} className="animate-spin text-accent" />
             ) : (
               <span className={`h-2 w-2 rounded-full shadow-[0_0_8px_currentColor] ${statusMeta.dot}`} />
             )}
             {statusMeta.label}
           </span>
           {role === 'COLLABORATOR' && (
-            <span className="hidden items-center gap-1.5 rounded-full border border-purple-500/40 bg-purple-500/15 px-2 py-0.5 text-[11px] font-bold text-purple-400 sm:inline-flex shadow-[0_0_10px_rgba(168,85,247,0.2)]">
+            <span className="hidden items-center gap-1.5 rounded-full border border-purple-500/40 bg-purple-500/15 px-2 py-0.5 text-[11px] font-bold text-purple-600 dark:text-purple-400 sm:inline-flex shadow-sm">
               <Users size={11} />
               Colaborador
             </span>
@@ -129,7 +129,7 @@ export function EditorHeader({
       </div>
 
       {/* Selector destacado de Modo: Manual vs Modo IA */}
-      <div className="flex items-center rounded-xl border border-white/10 bg-[#0b0f19] p-1 shadow-inner">
+      <div className="flex items-center rounded-xl border border-hairline bg-sunken p-1 shadow-inner">
         <button
           type="button"
           onClick={() => aiMode && onToggleAiMode()}

@@ -24,12 +24,12 @@ export function ClassNode({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`min-w-[220px] overflow-hidden rounded-xl border font-sans text-[11px] shadow-2xl transition-all duration-200 ${
+      className={`min-w-[220px] overflow-hidden rounded-xl border font-sans text-[11px] shadow-lg transition-all duration-200 ${
         selected
-          ? 'border-sky-400 ring-4 ring-sky-500/25 shadow-[0_0_30px_rgba(56,189,248,0.3)] bg-[#0f172a]'
+          ? 'border-sky-400 ring-4 ring-sky-500/25 shadow-[0_0_30px_rgba(56,189,248,0.3)] bg-surface'
           : isAssociative
-            ? 'border-purple-500/80 shadow-[0_0_20px_rgba(168,85,247,0.25)] bg-[#131b2e]'
-            : 'border-slate-800 bg-[#0f172a] hover:border-slate-700 shadow-black/60'
+            ? 'border-purple-500/80 shadow-[0_0_20px_rgba(168,85,247,0.25)] bg-surface'
+            : 'border-hairline-strong bg-surface hover:border-accent hover:shadow-xl'
       }`}
     >
       {/* Handles */}
@@ -44,8 +44,8 @@ export function ClassNode({ data, selected }: NodeProps) {
       <div
         className={`relative px-3.5 py-2.5 text-center border-b ${
           isAssociative
-            ? 'bg-gradient-to-r from-purple-950/80 via-indigo-950/70 to-purple-950/80 border-purple-500/40'
-            : 'bg-gradient-to-r from-slate-900 via-slate-800/90 to-slate-900 border-white/10'
+            ? 'bg-purple-500/15 border-purple-500/30'
+            : 'bg-raised/90 border-hairline'
         }`}
       >
         <span
@@ -58,55 +58,55 @@ export function ClassNode({ data, selected }: NodeProps) {
 
         <div className="mb-1 flex items-center justify-center">
           {isAssociative ? (
-            <span className="inline-flex items-center rounded-full border border-purple-400/50 bg-purple-500/20 px-2 py-0.5 text-[9px] font-bold tracking-wider text-purple-300 uppercase shadow-[0_0_10px_rgba(168,85,247,0.3)]">
+            <span className="inline-flex items-center rounded-full border border-purple-400/50 bg-purple-500/20 px-2 py-0.5 text-[9px] font-bold tracking-wider text-purple-600 dark:text-purple-300 uppercase shadow-[0_0_10px_rgba(168,85,247,0.2)]">
               ⚡ Clase Asociativa (N:M)
             </span>
           ) : (
-            <span className="inline-flex items-center rounded-full border border-sky-400/40 bg-sky-500/15 px-2 py-0.5 text-[9px] font-bold tracking-wider text-sky-300 uppercase">
+            <span className="inline-flex items-center rounded-full border border-sky-400/40 bg-sky-500/15 px-2 py-0.5 text-[9px] font-bold tracking-wider text-sky-600 dark:text-sky-300 uppercase">
               «Clase UML»
             </span>
           )}
         </div>
 
-        <span className="block text-[14px] font-extrabold tracking-tight text-white drop-shadow-sm">
+        <span className="block text-[14px] font-extrabold tracking-tight text-ink drop-shadow-xs">
           {name ?? 'NuevaClase'}
         </span>
       </div>
 
       {/* Atributos */}
-      <div className="px-3.5 py-2.5 bg-[#0b0f19]/60">
-        <span className="block text-[9px] font-bold tracking-wider text-slate-400 uppercase mb-1.5">
+      <div className="px-3.5 py-2.5 bg-sunken/60">
+        <span className="block text-[9px] font-bold tracking-wider text-ink-muted uppercase mb-1.5">
           Atributos ({attributes?.length ?? 0})
         </span>
         <ul className="space-y-1 font-mono text-[11px]">
           {attributes && attributes.length > 0 ? (
             attributes.map((attr, i) => (
-              <li key={i} className="flex items-center gap-1.5 whitespace-nowrap text-slate-200">
-                <span className="font-bold text-sky-400">−</span>
-                <span className="font-medium text-slate-100">{attr}</span>
+              <li key={i} className="flex items-center gap-1.5 whitespace-nowrap text-ink">
+                <span className="font-bold text-sky-500">−</span>
+                <span className="font-medium text-ink-soft">{attr}</span>
               </li>
             ))
           ) : (
-            <li className="text-slate-500 italic text-[10px]">sin atributos</li>
+            <li className="text-ink-faint italic text-[10px]">sin atributos</li>
           )}
         </ul>
       </div>
 
       {/* Métodos */}
-      <div className="px-3.5 py-2.5 border-t border-white/5 bg-[#0b0f19]/90">
-        <span className="block text-[9px] font-bold tracking-wider text-slate-400 uppercase mb-1.5">
+      <div className="px-3.5 py-2.5 border-t border-hairline bg-sunken/90">
+        <span className="block text-[9px] font-bold tracking-wider text-ink-muted uppercase mb-1.5">
           Métodos ({methods?.length ?? 0})
         </span>
         <ul className="space-y-1 font-mono text-[11px]">
           {methods && methods.length > 0 ? (
             methods.map((method, i) => (
-              <li key={i} className="flex items-center gap-1.5 whitespace-nowrap text-slate-200">
-                <span className="font-bold text-emerald-400">+</span>
-                <span className="font-medium text-slate-100">{method}</span>
+              <li key={i} className="flex items-center gap-1.5 whitespace-nowrap text-ink">
+                <span className="font-bold text-emerald-500">+</span>
+                <span className="font-medium text-ink-soft">{method}</span>
               </li>
             ))
           ) : (
-            <li className="text-slate-500 italic text-[10px]">sin métodos</li>
+            <li className="text-ink-faint italic text-[10px]">sin métodos</li>
           )}
         </ul>
       </div>

@@ -44,11 +44,11 @@ export function LoginPage() {
   return (
     <AuthShell>
       <div className="mb-6 flex flex-col items-center text-center">
-        <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl border-2 border-sky-500/50 bg-[#131b2e] text-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.3)]">
-          <Lock size={26} className="text-sky-400" />
+        <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl border-2 border-sky-500/50 bg-raised text-accent shadow-md">
+          <Lock size={26} className="text-accent" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Inicia sesión</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Inicia sesión</h1>
+        <p className="mt-1 text-sm text-ink-muted">
           Accede para continuar con tus diagramas y colaborar en vivo
         </p>
       </div>

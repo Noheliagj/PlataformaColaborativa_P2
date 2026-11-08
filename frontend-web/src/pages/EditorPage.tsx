@@ -1099,7 +1099,7 @@ export function EditorPage() {
         )}
 
         {/* Lienzo */}
-        <div className="relative flex-1 bg-[#0b0f19]">
+        <div className="relative flex-1 bg-canvas">
           <ReactFlow
             nodes={nodes}
             edges={edges}

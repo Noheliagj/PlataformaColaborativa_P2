@@ -39,17 +39,17 @@ export type ClassEdgeData = {
 
 const LABEL_CLASS =
   'absolute select-none whitespace-nowrap rounded-lg border border-sky-500/40 ' +
-  'bg-[#0f172a]/95 px-2.5 py-1 text-[11px] font-bold text-sky-300 shadow-[0_0_15px_rgba(56,189,248,0.25)] ' +
+  'bg-surface/95 px-2.5 py-1 text-[11px] font-bold text-sky-600 dark:text-sky-300 shadow-md ' +
   'backdrop-blur-md pointer-events-auto';
 
 const CARD_CLASS =
-  'absolute select-none whitespace-nowrap rounded-md border border-white/15 ' +
-  'bg-[#131b2e]/95 px-1.5 py-0.5 font-mono text-[10px] font-bold text-sky-400 shadow-[0_2px_10px_rgba(0,0,0,0.6)] ' +
+  'absolute select-none whitespace-nowrap rounded-md border border-hairline-strong ' +
+  'bg-raised/95 px-1.5 py-0.5 font-mono text-[10px] font-bold text-accent shadow-sm ' +
   'backdrop-blur-md pointer-events-auto';
 
 const ROLE_CLASS =
-  'absolute select-none whitespace-nowrap rounded-md border border-white/10 ' +
-  'bg-[#0b0f19]/90 px-1.5 py-0.5 text-[9px] italic text-slate-300 shadow-sm ' +
+  'absolute select-none whitespace-nowrap rounded-md border border-hairline ' +
+  'bg-sunken/90 px-1.5 py-0.5 text-[9px] italic text-ink-muted shadow-sm ' +
   'pointer-events-auto';
 
 /** Calcula el trazo (path) + punto de etiqueta según el estilo elegido. */

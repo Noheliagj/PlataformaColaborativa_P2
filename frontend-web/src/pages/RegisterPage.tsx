@@ -50,11 +50,11 @@ export function RegisterPage() {
   return (
     <AuthShell>
       <div className="mb-6 flex flex-col items-center text-center">
-        <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl border-2 border-indigo-500/50 bg-[#131b2e] text-indigo-400 shadow-[0_0_25px_rgba(168,85,247,0.3)]">
-          <User size={26} className="text-indigo-400" />
+        <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl border-2 border-indigo-500/50 bg-raised text-accent-hi shadow-md">
+          <User size={26} className="text-accent-hi" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Crea tu cuenta</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Crea tu cuenta</h1>
+        <p className="mt-1 text-sm text-ink-muted">
           Empieza a modelar tu software y colaborar en minutos
         </p>
       </div>

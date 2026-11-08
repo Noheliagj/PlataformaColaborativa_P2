@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Check,
   Clock,
+  Compass,
   FolderPlus,
   Link2,
   LogIn,
@@ -28,6 +29,7 @@ import { Navbar } from '../components/Navbar';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { OnboardingTour } from '../components/OnboardingTour';
+import { HelpGuideAssistant } from '../components/HelpGuideAssistant';
 import { hasSeenOnboarding, markOnboardingSeen } from '../lib/onboarding';
 
 const FIELD_CLASS =
@@ -60,6 +62,9 @@ export function HomePage() {
   // RF4: feedback al copiar el enlace + código de invitación de un proyecto.
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
+
+  // Modal de Asistente Guía & Centro de Ayuda
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // Tutorial guiado para usuarios nuevos: se abre solo una vez (ver
   // lib/onboarding.ts) y se puede volver a ver desde el botón de ayuda del
@@ -254,12 +259,16 @@ export function HomePage() {
         user={user}
         onLogout={handleLogout}
         onReplayTour={() => setTourOpen(true)}
+        onOpenGuide={() => setGuideOpen(true)}
       />
 
       {/* Cabecera de la vista */}
       <div className="bg-halo relative border-b border-hairline">
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-50" />
-        <main className="relative mx-auto max-w-6xl px-5 pt-9 pb-7">
+        <main
+          data-tour="workspace-header"
+          className="relative mx-auto max-w-6xl px-5 pt-9 pb-7"
+        >
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="text-[12px] font-medium tracking-wide text-ink-muted uppercase">
@@ -276,7 +285,7 @@ export function HomePage() {
                     } en tu espacio de trabajo.`}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div data-tour="quick-actions" className="flex items-center gap-2">
               <Button
                 variant="secondary"
                 onClick={openJoinModal}
@@ -331,26 +340,27 @@ export function HomePage() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project) => {
+            {projects.map((project, index) => {
               const isOwner = project.role !== 'COLLABORATOR';
               return (
                 <article
                   key={project.id}
-                  className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#131b2e] to-[#0f172a] p-6 shadow-xl transition-all duration-300 hover:border-sky-500/50 hover:shadow-[0_0_30px_rgba(56,189,248,0.18)] hover:-translate-y-1"
+                  data-tour={index === 0 ? 'project-card' : undefined}
+                  className="group relative flex flex-col overflow-hidden rounded-2xl border border-hairline-strong bg-surface p-6 shadow-md transition-all duration-300 hover:border-sky-500/50 hover:shadow-[0_0_30px_rgba(56,189,248,0.18)] hover:-translate-y-1"
                 >
                   <span className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-sky-400 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className="truncate text-[16px] font-bold text-white tracking-tight">
+                        <h3 className="truncate text-[16px] font-bold text-ink tracking-tight">
                           {project.name}
                         </h3>
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                             isOwner
-                              ? 'border border-sky-500/40 bg-sky-500/15 text-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.2)]'
-                              : 'border border-purple-500/40 bg-purple-500/15 text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
+                              ? 'border border-sky-500/40 bg-sky-500/15 text-sky-600 dark:text-sky-400 shadow-sm'
+                              : 'border border-purple-500/40 bg-purple-500/15 text-purple-600 dark:text-purple-400 shadow-sm'
                           }`}
                         >
                           <Users size={10} />
@@ -362,13 +372,14 @@ export function HomePage() {
                       {isOwner && (
                         <button
                           type="button"
+                          data-tour={index === 0 ? 'project-invite-action' : undefined}
                           onClick={() => handleCopyInvite(project)}
                           disabled={inviteBusyId === project.id}
-                          className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
+                          className="rounded-lg p-2 text-ink-muted transition-colors hover:bg-raised hover:text-ink disabled:opacity-50"
                           title="Copiar enlace de invitación y código"
                         >
                           {copiedId === project.id ? (
-                            <Check size={16} className="text-emerald-400" />
+                            <Check size={16} className="text-emerald-500" />
                           ) : (
                             <Link2 size={16} />
                           )}
@@ -379,7 +390,7 @@ export function HomePage() {
                           type="button"
                           onClick={() => handleDelete(project.id)}
                           disabled={deletingId === project.id}
-                          className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-rose-500/20 hover:text-rose-400 disabled:opacity-50"
+                          className="rounded-lg p-2 text-ink-muted transition-colors hover:bg-critical-soft hover:text-critical disabled:opacity-50"
                           title="Eliminar proyecto"
                         >
                           <Trash2 size={16} />
@@ -388,17 +399,18 @@ export function HomePage() {
                     </div>
                   </div>
 
-                  <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-[13px] text-slate-300">
+                  <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-[13px] text-ink-soft">
                     {project.description || 'Sin descripción.'}
                   </p>
 
-                  <div className="mt-4 flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
-                    <Clock size={13} className="text-sky-400" />
+                  <div className="mt-4 flex items-center gap-1.5 text-[11px] text-ink-muted font-mono">
+                    <Clock size={13} className="text-accent" />
                     Actualizado {formatDate(project.updatedAt)}
                   </div>
 
                   <button
                     type="button"
+                    data-tour={index === 0 ? 'editor-open-action' : undefined}
                     onClick={() => navigate(`/projects/${project.id}/editor`)}
                     className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl border border-sky-500/40 bg-gradient-to-r from-sky-600 to-blue-600 px-4 py-2.5 text-[13px] font-bold text-white shadow-[0_0_18px_rgba(56,189,248,0.22)] transition-all group-hover:from-sky-500 group-hover:to-blue-500 group-hover:shadow-[0_0_24px_rgba(56,189,248,0.4)]"
                   >
@@ -556,6 +568,30 @@ export function HomePage() {
           </div>
         </form>
       </Modal>
+
+      {/* Botón flotante para el Asistente Guía & Centro de Ayuda */}
+      <button
+        type="button"
+        data-tour="guide-assistant-btn"
+        onClick={() => setGuideOpen(true)}
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 rounded-full border border-sky-400/40 bg-gradient-to-r from-sky-600 via-blue-600 to-indigo-600 px-4 py-3 text-xs font-bold text-white shadow-[0_8px_25px_rgba(56,189,248,0.35)] transition-all hover:scale-105 hover:shadow-[0_12px_32px_rgba(56,189,248,0.5)] cursor-pointer"
+        title="Abrir Asistente Guía & Centro de Ayuda"
+      >
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-white/20">
+          <Compass size={14} className="text-white animate-spin-slow" />
+        </span>
+        <span className="tracking-tight hidden sm:inline">Asistente Guía & Ayuda</span>
+        <span className="tracking-tight sm:hidden">Guía</span>
+      </button>
+
+      <HelpGuideAssistant
+        open={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        onStartTour={() => {
+          setGuideOpen(false);
+          setTourOpen(true);
+        }}
+      />
 
       <OnboardingTour
         open={tourOpen}

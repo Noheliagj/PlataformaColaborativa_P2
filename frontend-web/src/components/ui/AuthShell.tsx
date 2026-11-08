@@ -47,7 +47,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
           <ul className="space-y-4">
             {HIGHLIGHTS.map((item) => (
               <li key={item} className="flex items-start gap-3 text-sm text-ink-soft">
-                <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-lg border border-sky-500/40 bg-[#0f172a] text-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.25)]">
+                <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-lg border border-sky-500/40 bg-surface text-accent shadow-sm">
                   <svg
                     viewBox="0 0 16 16"
                     fill="none"
@@ -63,7 +63,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
                     />
                   </svg>
                 </span>
-                <span className="font-medium text-slate-200">{item}</span>
+                <span className="font-medium text-ink-soft">{item}</span>
               </li>
             ))}
           </ul>
@@ -77,7 +77,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
       {/* Panel del formulario con contenedor estilizado */}
       <main className="relative flex items-center justify-center px-5 py-12 sm:px-8">
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-40 lg:hidden" />
-        <div className="animate-fade-rise relative w-full max-w-md rounded-2xl border border-white/10 bg-[#0f172a]/85 p-8 shadow-2xl backdrop-blur-xl ring-1 ring-white/5 sm:p-10">
+        <div className="animate-fade-rise relative w-full max-w-md rounded-2xl border border-hairline-strong bg-surface/90 p-8 shadow-2xl backdrop-blur-xl ring-1 ring-hairline sm:p-10">
           <div className="mb-6 flex justify-center lg:hidden">
             <Brand size="lg" />
           </div>

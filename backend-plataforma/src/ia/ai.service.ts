@@ -478,11 +478,29 @@ REGLAS DE ACTUACIÓN:
    - "create_class": Para crear nuevas clases con atributos y métodos.
    - "create_relationship": Para vincular clases existentes con tipos UML y cardinalidades. Admite relaciones muchos a muchos ("0..*" a "0..*") y clases de asociación (intermedia).
    - "update_canvas": Para modificar elementos existentes (renombrar clases, añadir nuevos atributos o métodos).
-2. Si el usuario solicita AUDITAR el diagrama o detectar inconsistencias, revisa a fondo las clases existentes, atributos vacíos, relaciones huérfanas o errores de cardinalidad y presenta un diagnóstico claro con recomendaciones.
-3. Si el usuario solicita un RESUMEN DE AVANCES o se incorpora tarde, sintetiza de forma ejecutiva qué se ha modelado, qué cambios recientes se hicieron según el historial y qué tareas quedan pendientes.
+2. Si el usuario solicita AUDITAR el diagrama o detectar inconsistencias, revisa a fondo las clases existentes, atributos vacíos, relaciones huérfanas o errores de cardinalidad y presenta un diagnóstico claro con recomendaciones. Organiza el diagnóstico exclusivamente mediante listas jerárquicas con viñetas y negritas (SIN TABLAS MARKDOWN).
+3. Si el usuario solicita un RESUMEN DE AVANCES o se incorpora tarde, sintetiza de forma ejecutiva qué se ha modelado, qué cambios recientes se hicieron según el historial y qué tareas quedan pendientes usando listas con viñetas ordenadas (SIN TABLAS MARKDOWN).
 4. Si el usuario no especifica tipo de dato para un atributo, usa "String". Si no especifica tipo de retorno de un método, usa "void".
 5. Ten en cuenta el contexto de la conversación grupal y las decisiones previas de los usuarios.
 6. Responde siempre en español, de manera estructurada, concisa y profesional.
+
+REGLAS DE FORMATO Y ESTÉTICA EN EL CHAT (OBLIGATORIAS):
+- PROHIBIDO TERMINANTEMENTE EL USO DE TABLAS MARKDOWN (sintaxis con barras verticales "| Columna | ... |" o separadores "|---|"). En las burbujas de chat las tablas se rompen visualmente, desalinean las columnas y se vuelven ilegibles.
+- ESTRUCTURA SIEMPRE la información utilizando listas con viñetas ("*" o "-"), negritas y sangrías ordenadas en niveles jerárquicos limpios.
+- Para auditorías de clases, revisiones de entidades o listas comparativas, utiliza estrictamente este formato con viñetas y negritas:
+  * **Clase:** NombreClase
+    * **Atributos:** id: Long, nombre: String, ...
+    * **Métodos:** calcularTotal(): Double, ...
+    * **Estado / Diagnóstico:** Estado actual de la entidad, inconsistencias o validaciones.
+    * **Recomendación:** Sugerencia de mejora o corrección.
+- Para resúmenes ejecutivos o diagnósticos generales:
+  * **Avances Recientes:**
+    * ...
+  * **Inconsistencias Detectadas:**
+    * ...
+  * **Próximos Pasos Sugeridos:**
+    * ...
+- Utiliza negritas ("**término**") para encabezados y etiquetas, y comillas o backticks (\`código\`) para nombres de métodos o atributos técnicos. NUNCA generes tablas con barras verticales.
 
 ESTADO ACTUAL DEL CANVAS / DIAGRAMA:
 Clases existentes:

@@ -86,6 +86,200 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+interface FormattedChatMessageProps {
+  content: string;
+  isAi: boolean;
+  isOwn: boolean;
+}
+
+function renderInlineFormatting(text: string, isAi: boolean, isOwn: boolean) {
+  const regex = /(\*\*.*?\*\*|`.*?`)/g;
+  const parts = text.split(regex);
+
+  return parts.map((part, index) => {
+    if (!part) return null;
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      const boldText = part.slice(2, -2);
+      return (
+        <strong
+          key={index}
+          className={`font-semibold ${
+            isOwn ? 'text-white' : isAi ? 'text-purple-200' : 'text-ink'
+          }`}
+        >
+          {boldText}
+        </strong>
+      );
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+      const codeText = part.slice(1, -1);
+      return (
+        <code
+          key={index}
+          className={`rounded px-1 py-0.5 font-mono text-[11px] ${
+            isOwn
+              ? 'bg-white/20 text-white'
+              : isAi
+              ? 'border border-purple-500/25 bg-purple-900/40 text-purple-300'
+              : 'border border-hairline bg-raised text-ink-soft'
+          }`}
+        >
+          {codeText}
+        </code>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
+function FormattedChatMessage({ content, isAi, isOwn }: FormattedChatMessageProps) {
+  if (!isAi) {
+    return <p className="whitespace-pre-wrap break-words">{content}</p>;
+  }
+
+  const lines = content.split('\n');
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
+
+    // 1. Detectar tablas Markdown (| Columna 1 | Columna 2 |) en caso de existir en el historial
+    if (trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.length > 2) {
+      const tableLines: string[] = [];
+      while (
+        i < lines.length &&
+        lines[i].trim().startsWith('|') &&
+        lines[i].trim().endsWith('|')
+      ) {
+        tableLines.push(lines[i].trim());
+        i++;
+      }
+
+      const parsedRows = tableLines
+        .filter((tl) => !/^\|(\s*:?-+:?\s*\|)+$/.test(tl)) // Ignorar línea divisoria |---|---|
+        .map((tl) =>
+          tl
+            .split('|')
+            .slice(1, -1)
+            .map((c) => c.trim())
+        );
+
+      if (parsedRows.length > 0) {
+        const headers = parsedRows[0];
+        const rows = parsedRows.slice(1);
+
+        elements.push(
+          <div
+            key={`table-${i}`}
+            className="my-2.5 max-w-full overflow-x-auto rounded-lg border border-purple-500/30 bg-purple-950/40 p-0.5 shadow-xs"
+          >
+            <table className="w-full min-w-[260px] border-collapse text-left text-[11px]">
+              <thead>
+                <tr className="border-b border-purple-500/30 bg-purple-900/35">
+                  {headers.map((h, colIdx) => (
+                    <th
+                      key={colIdx}
+                      className="px-2.5 py-1.5 font-bold text-purple-200 whitespace-nowrap"
+                    >
+                      {renderInlineFormatting(h, isAi, isOwn)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, rowIdx) => (
+                  <tr
+                    key={rowIdx}
+                    className="border-b border-purple-500/15 last:border-none hover:bg-purple-900/20"
+                  >
+                    {row.map((cell, cellIdx) => (
+                      <td
+                        key={cellIdx}
+                        className="px-2.5 py-1.5 text-ink-soft align-top"
+                      >
+                        {renderInlineFormatting(cell, isAi, isOwn)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      continue;
+    }
+
+    // 2. Líneas vacías
+    if (!trimmed) {
+      elements.push(<div key={`empty-${i}`} className="h-1.5" />);
+      i++;
+      continue;
+    }
+
+    // 3. Encabezados Markdown (#, ##, ###)
+    const headerMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
+    if (headerMatch) {
+      elements.push(
+        <h4
+          key={`h-${i}`}
+          className="mt-2.5 mb-1 font-bold text-purple-300 text-[12.5px] tracking-tight"
+        >
+          {renderInlineFormatting(headerMatch[2], isAi, isOwn)}
+        </h4>
+      );
+      i++;
+      continue;
+    }
+
+    // 4. Listas y viñetas (con soporte para sub-niveles e indentación)
+    const bulletMatch = rawLine.match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);
+    if (bulletMatch) {
+      const indentLength = bulletMatch[1].length;
+      const isSubLevel = indentLength >= 2;
+      const text = bulletMatch[3];
+
+      elements.push(
+        <div
+          key={`bullet-${i}`}
+          className={`flex items-start gap-1.5 my-1 leading-relaxed ${
+            isSubLevel
+              ? 'ml-3.5 border-l border-purple-500/25 pl-2 text-[12px]'
+              : 'text-[12.5px]'
+          }`}
+        >
+          <span
+            className={`shrink-0 select-none ${
+              isSubLevel
+                ? 'mt-1.5 text-[9px] text-purple-400/70'
+                : 'mt-1 text-[11px] text-purple-400 font-bold'
+            }`}
+          >
+            {isSubLevel ? '○' : '•'}
+          </span>
+          <div className="min-w-0 flex-1 break-words">
+            {renderInlineFormatting(text, isAi, isOwn)}
+          </div>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // 5. Párrafo normal
+    elements.push(
+      <p key={`p-${i}`} className="my-0.5 break-words leading-relaxed text-[12.5px]">
+        {renderInlineFormatting(trimmed, isAi, isOwn)}
+      </p>
+    );
+    i++;
+  }
+
+  return <div className="space-y-0.5 text-left">{elements}</div>;
+}
+
 export function AiWorkspacePanel({
   messages,
   currentUserId,
@@ -129,10 +323,10 @@ export function AiWorkspacePanel({
   }
 
   const AUDIT_PROMPT =
-    'Por favor, audita el diagrama de clases UML actual: analiza si existen clases sin atributos o métodos esenciales, relaciones huérfanas, errores de cardinalidad o inconsistencias teóricas de modelado UML, y propón las correcciones o mejoras pertinentes.';
+    'Por favor, audita el diagrama de clases UML actual: analiza si existen clases sin atributos o métodos esenciales, relaciones huérfanas, errores de cardinalidad o inconsistencias teóricas de modelado UML, y propón las correcciones o mejoras pertinentes. Estructura tu respuesta usando listas con viñetas y negritas jerárquicas (no utilices tablas markdown).';
 
   const SUMMARY_PROMPT =
-    'Por favor, genera un resumen ejecutivo y claro de los avances del equipo en este proyecto: qué clases y relaciones se han creado o modificado recientemente y cuáles son las tareas o aspectos pendientes del modelado.';
+    'Por favor, genera un resumen ejecutivo y claro de los avances del equipo en este proyecto: qué clases y relaciones se han creado o modificado recientemente y cuáles son las tareas o aspectos pendientes del modelado. Estructura tu respuesta usando listas con viñetas y negritas jerárquicas (no utilices tablas markdown).';
 
   function handleAudit() {
     if (isProcessing) return;
@@ -238,10 +432,10 @@ export function AiWorkspacePanel({
                   type="button"
                   onClick={handleAudit}
                   disabled={isProcessing}
-                  className="flex flex-col items-start gap-1 rounded-xl border border-purple-500/35 bg-purple-950/20 p-2.5 text-left transition-all hover:border-purple-400 hover:bg-purple-900/30 disabled:opacity-50 shadow-sm"
+                  className="flex flex-col items-start gap-1 rounded-xl border border-purple-500/35 bg-purple-500/10 p-2.5 text-left transition-all hover:border-purple-400 hover:bg-purple-500/20 disabled:opacity-50 shadow-sm"
                 >
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-purple-300">
-                    <ShieldAlert size={14} className="text-purple-400" />
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-purple-600 dark:text-purple-300">
+                    <ShieldAlert size={14} className="text-purple-500" />
                     <span>Auditar Diagrama</span>
                   </div>
                   <span className="text-[10px] text-ink-muted leading-tight">
@@ -253,10 +447,10 @@ export function AiWorkspacePanel({
                   type="button"
                   onClick={handleSummary}
                   disabled={isProcessing}
-                  className="flex flex-col items-start gap-1 rounded-xl border border-sky-500/35 bg-sky-950/20 p-2.5 text-left transition-all hover:border-sky-400 hover:bg-sky-900/30 disabled:opacity-50 shadow-sm"
+                  className="flex flex-col items-start gap-1 rounded-xl border border-sky-500/35 bg-sky-500/10 p-2.5 text-left transition-all hover:border-sky-400 hover:bg-sky-500/20 disabled:opacity-50 shadow-sm"
                 >
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-300">
-                    <FileText size={14} className="text-sky-400" />
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-600 dark:text-sky-300">
+                    <FileText size={14} className="text-sky-500" />
                     <span>Resumen de Avances</span>
                   </div>
                   <span className="text-[10px] text-ink-muted leading-tight">
@@ -335,27 +529,27 @@ export function AiWorkspacePanel({
               <div
                 className={`rounded-xl px-3.5 py-2.5 max-w-[90%] shadow-sm ${
                   isAi
-                    ? 'border border-purple-500/25 bg-purple-950/20 text-ink leading-relaxed ring-1 ring-purple-500/10'
+                    ? 'border border-purple-500/30 bg-purple-500/10 text-ink leading-relaxed ring-1 ring-purple-500/15'
                     : isOwn
                     ? 'bg-accent text-white rounded-br-none shadow-md shadow-accent/20'
                     : 'bg-raised border border-hairline text-ink-soft rounded-bl-none'
                 }`}
               >
-                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                <FormattedChatMessage content={msg.content} isAi={isAi} isOwn={isOwn} />
 
                 {/* Acciones de Tool Calling ejecutadas por la IA */}
                 {isAi && msg.actions && msg.actions.length > 0 && (
                   <div className="mt-2.5 space-y-1.5 border-t border-purple-500/20 pt-2">
-                    <p className="text-[10px] font-semibold tracking-wider text-purple-300 uppercase">
+                    <p className="text-[10px] font-semibold tracking-wider text-purple-600 dark:text-purple-300 uppercase">
                       Cambios aplicados al lienzo:
                     </p>
                     <div className="space-y-1">
                       {msg.actions.map((action, idx) => (
                         <div
                           key={idx}
-                          className="flex items-start gap-1.5 rounded-md bg-purple-500/10 px-2 py-1 text-[11px] text-purple-200"
+                          className="flex items-start gap-1.5 rounded-md bg-purple-500/15 px-2 py-1 text-[11px] text-purple-700 dark:text-purple-200"
                         >
-                          <Check size={12} className="mt-0.5 shrink-0 text-emerald-400" />
+                          <Check size={12} className="mt-0.5 shrink-0 text-emerald-500" />
                           <span>{action}</span>
                         </div>
                       ))}
