@@ -378,30 +378,29 @@ export function AiWorkspacePanel({
       recognition.interimResults = false;
 
       recognition.onstart = () => {
+        console.log('🎤 [IA Mic] Micrófono iniciado - esperando voz...');
         setListening(true);
         setVoiceError(null);
       };
 
-      recognition.onresult = (event) => {
-        let fullTranscript = '';
-        for (let i = 0; i < event.results.length; i++) {
-          const item = event.results[i];
-          if (item && item[0]) {
-            fullTranscript += item[0].transcript;
-          }
-        }
-        const text = fullTranscript.trim() || event.results[0]?.[0]?.transcript?.trim() || '';
-        if (text) {
-          setInput((prev) => (prev ? `${prev} ${text}` : text));
+      recognition.onresult = (event: any) => {
+        console.log('✅ [IA Mic] onresult recibido:', event);
+        const transcript =
+          event?.results?.[event.resultIndex]?.[0]?.transcript ||
+          event?.results?.[0]?.[0]?.transcript ||
+          '';
+        console.log('✅ [IA Mic] Texto transcrito:', transcript);
+        if (transcript.trim()) {
+          const cleanText = transcript.trim();
+          setInput((prev) => (prev ? `${prev} ${cleanText}` : cleanText));
         }
       };
 
-      recognition.onerror = (event: { error: string }) => {
-        const err = event.error;
-        console.warn('SpeechRecognition error:', err);
+      recognition.onerror = (event: any) => {
+        const err = event?.error || 'desconocido';
+        console.warn('❌ [IA Mic] Error:', err);
         setListening(false);
         if (err === 'no-speech') {
-          // Si no detectó audio, no es un error fatal, simplemente se detiene
           return;
         }
         if (err === 'not-allowed' || err === 'service-not-allowed') {
@@ -418,6 +417,7 @@ export function AiWorkspacePanel({
       };
 
       recognition.onend = () => {
+        console.log('⏹️ [IA Mic] Micrófono finalizado');
         setListening(false);
       };
 
