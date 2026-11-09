@@ -344,7 +344,7 @@ export function AiWorkspacePanel({
     onSendMessage(SUMMARY_PROMPT);
   }
 
-  async function toggleVoice() {
+  function toggleVoice() {
     setVoiceError(null);
 
     if (listening) {
@@ -363,22 +363,6 @@ export function AiWorkspacePanel({
       return;
     }
 
-    // Solicitar permiso de audio explícito al navegador si está disponible
-    if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-      } catch (err: unknown) {
-        const errName = (err as Error)?.name || '';
-        if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
-          setVoiceError(
-            'Permiso de micrófono denegado. Haz clic en el ícono de ajustes a la izquierda de la URL (http://...) y permite el acceso al micrófono.'
-          );
-          return;
-        }
-      }
-    }
-
     try {
       if (recognitionRef.current) {
         try {
@@ -388,9 +372,10 @@ export function AiWorkspacePanel({
       }
 
       const recognition = new Ctor();
-      const userLang = navigator.language || 'es-ES';
-      recognition.lang = userLang.startsWith('es') ? userLang : 'es-ES';
-      recognition.continuous = false;
+      // 'es-ES' es compatible universalmente con el motor de voz de Chrome y Edge en Windows
+      const browserLang = (navigator.language || 'es-ES').toLowerCase();
+      recognition.lang = browserLang.startsWith('es') ? 'es-ES' : browserLang;
+      recognition.continuous = true;
       recognition.interimResults = true;
 
       recognition.onstart = () => {
@@ -399,34 +384,34 @@ export function AiWorkspacePanel({
       };
 
       recognition.onresult = (event) => {
-        let transcript = '';
-        let isFinal = false;
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          transcript += result[0].transcript;
-          if (result.isFinal) isFinal = true;
+        let fullTranscript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          const item = event.results[i];
+          if (item && item[0]) {
+            fullTranscript += item[0].transcript;
+          }
         }
-        setInput(transcript);
-        if (isFinal && transcript.trim()) {
-          onSendMessage(transcript.trim());
-          setInput('');
+        if (fullTranscript.trim()) {
+          setInput(fullTranscript);
         }
       };
 
       recognition.onerror = (event: { error: string }) => {
-        setListening(false);
         const err = event.error;
+        console.warn('SpeechRecognition error:', err);
         if (err === 'no-speech' || err === 'aborted') {
+          // No abortar ni cerrar listening si fue una simple pausa de silencio
           return;
         }
+        setListening(false);
         if (err === 'not-allowed' || err === 'service-not-allowed') {
           setVoiceError(
-            'Permiso de micrófono bloqueado por el navegador. En Chrome, haz clic en el candado/ícono a la izquierda de la URL (http://3.142.242.251) y cambia "Micrófono" a Permitir.'
+            'Permiso de micrófono bloqueado. Haz clic en el ícono junto a la URL y selecciona Permitir acceso al micrófono.'
           );
         } else if (err === 'audio-capture') {
-          setVoiceError('No se encontró ningún micrófono conectado en tu equipo.');
+          setVoiceError('No se detectó ningún micrófono activo en tu equipo.');
         } else if (err === 'network') {
-          setVoiceError('Error de red al conectar con el servicio de voz de Google.');
+          setVoiceError('Error de red al procesar la voz con el servicio de reconocimiento.');
         } else {
           setVoiceError(`Error del micrófono: ${err}`);
         }

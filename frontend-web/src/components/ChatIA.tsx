@@ -123,7 +123,7 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
    * navegador entrega el resultado final, se envía automáticamente a la IA
    * (mismo camino que si el usuario lo hubiera escrito y enviado a mano).
    */
-  async function toggleListening() {
+  function toggleListening() {
     setError(null);
     if (listening) {
       try {
@@ -138,21 +138,6 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
       return;
     }
 
-    if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-      } catch (err: unknown) {
-        const errName = (err as Error)?.name || '';
-        if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
-          setError(
-            'Permiso de micrófono denegado. Haz clic en el ícono junto a la URL (http://...) y permite el acceso al micrófono.'
-          );
-          return;
-        }
-      }
-    }
-
     try {
       if (recognitionRef.current) {
         try {
@@ -162,9 +147,9 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
       }
 
       const recognition = new Ctor();
-      const userLang = navigator.language || 'es-ES';
-      recognition.lang = userLang.startsWith('es') ? userLang : 'es-ES';
-      recognition.continuous = false;
+      const browserLang = (navigator.language || 'es-ES').toLowerCase();
+      recognition.lang = browserLang.startsWith('es') ? 'es-ES' : browserLang;
+      recognition.continuous = true;
       recognition.interimResults = true;
 
       recognition.onstart = () => {
@@ -173,34 +158,39 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
       };
 
       recognition.onresult = (event) => {
-        let transcript = '';
-        let isFinal = false;
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          transcript += result[0].transcript;
-          if (result.isFinal) isFinal = true;
+        let fullTranscript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          const item = event.results[i];
+          if (item && item[0]) {
+            fullTranscript += item[0].transcript;
+          }
         }
-        setInput(transcript);
-        if (isFinal && transcript.trim()) {
-          void sendMessage(transcript);
+        if (fullTranscript.trim()) {
+          setInput(fullTranscript);
         }
       };
+
       recognition.onerror = (event) => {
-        setListening(false);
-        if (event.error === 'no-speech' || event.error === 'aborted') {
+        const err = event.error;
+        console.warn('SpeechRecognition error:', err);
+        if (err === 'no-speech' || err === 'aborted') {
           return;
         }
-        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setListening(false);
+        if (err === 'not-allowed' || err === 'service-not-allowed') {
           setError(
-            'Permiso de micrófono denegado. En Chrome, haz clic en el candado/ajustes a la izquierda de la URL (http://...) y cambia "Micrófono" a Permitir.'
+            'Permiso de micrófono denegado. Haz clic en el ícono junto a la URL y permite el acceso al micrófono.'
           );
-        } else if (event.error === 'audio-capture') {
+        } else if (err === 'audio-capture') {
           setError('No se detectó ningún micrófono conectado.');
         } else {
-          setError(`No se pudo escuchar el micrófono (${event.error}).`);
+          setError(`No se pudo escuchar el micrófono (${err}).`);
         }
       };
-      recognition.onend = () => setListening(false);
+
+      recognition.onend = () => {
+        setListening(false);
+      };
 
       recognitionRef.current = recognition;
       recognition.start();
