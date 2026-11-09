@@ -147,10 +147,9 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
       }
 
       const recognition = new Ctor();
-      const browserLang = (navigator.language || 'es-ES').toLowerCase();
-      recognition.lang = browserLang.startsWith('es') ? 'es-ES' : browserLang;
-      recognition.continuous = true;
-      recognition.interimResults = true;
+      recognition.lang = 'es-ES';
+      recognition.continuous = false;
+      recognition.interimResults = false;
 
       recognition.onstart = () => {
         setListening(true);
@@ -165,25 +164,26 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
             fullTranscript += item[0].transcript;
           }
         }
-        if (fullTranscript.trim()) {
-          setInput(fullTranscript);
+        const text = fullTranscript.trim() || event.results[0]?.[0]?.transcript?.trim() || '';
+        if (text) {
+          setInput((prev) => (prev ? `${prev} ${text}` : text));
         }
       };
 
       recognition.onerror = (event) => {
         const err = event.error;
         console.warn('SpeechRecognition error:', err);
-        if (err === 'no-speech' || err === 'aborted') {
+        setListening(false);
+        if (err === 'no-speech') {
           return;
         }
-        setListening(false);
         if (err === 'not-allowed' || err === 'service-not-allowed') {
           setError(
             'Permiso de micrófono denegado. Haz clic en el ícono junto a la URL y permite el acceso al micrófono.'
           );
         } else if (err === 'audio-capture') {
           setError('No se detectó ningún micrófono conectado.');
-        } else {
+        } else if (err !== 'aborted') {
           setError(`No se pudo escuchar el micrófono (${err}).`);
         }
       };

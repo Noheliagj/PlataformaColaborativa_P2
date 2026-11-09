@@ -372,11 +372,10 @@ export function AiWorkspacePanel({
       }
 
       const recognition = new Ctor();
-      // 'es-ES' es compatible universalmente con el motor de voz de Chrome y Edge en Windows
-      const browserLang = (navigator.language || 'es-ES').toLowerCase();
-      recognition.lang = browserLang.startsWith('es') ? 'es-ES' : browserLang;
-      recognition.continuous = true;
-      recognition.interimResults = true;
+      recognition.lang = 'es-ES';
+      // Modo discreto por elocución (sin continuous ni interimResults para máxima compatibilidad con Edge en Windows)
+      recognition.continuous = false;
+      recognition.interimResults = false;
 
       recognition.onstart = () => {
         setListening(true);
@@ -391,19 +390,20 @@ export function AiWorkspacePanel({
             fullTranscript += item[0].transcript;
           }
         }
-        if (fullTranscript.trim()) {
-          setInput(fullTranscript);
+        const text = fullTranscript.trim() || event.results[0]?.[0]?.transcript?.trim() || '';
+        if (text) {
+          setInput((prev) => (prev ? `${prev} ${text}` : text));
         }
       };
 
       recognition.onerror = (event: { error: string }) => {
         const err = event.error;
         console.warn('SpeechRecognition error:', err);
-        if (err === 'no-speech' || err === 'aborted') {
-          // No abortar ni cerrar listening si fue una simple pausa de silencio
+        setListening(false);
+        if (err === 'no-speech') {
+          // Si no detectó audio, no es un error fatal, simplemente se detiene
           return;
         }
-        setListening(false);
         if (err === 'not-allowed' || err === 'service-not-allowed') {
           setVoiceError(
             'Permiso de micrófono bloqueado. Haz clic en el ícono junto a la URL y selecciona Permitir acceso al micrófono.'
@@ -412,7 +412,7 @@ export function AiWorkspacePanel({
           setVoiceError('No se detectó ningún micrófono activo en tu equipo.');
         } else if (err === 'network') {
           setVoiceError('Error de red al procesar la voz con el servicio de reconocimiento.');
-        } else {
+        } else if (err !== 'aborted') {
           setVoiceError(`Error del micrófono: ${err}`);
         }
       };
