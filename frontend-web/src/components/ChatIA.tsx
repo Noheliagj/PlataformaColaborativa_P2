@@ -39,6 +39,7 @@ interface SpeechRecognitionLike extends EventTarget {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
+  onstart: (() => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
@@ -122,9 +123,13 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
    * navegador entrega el resultado final, se envía automáticamente a la IA
    * (mismo camino que si el usuario lo hubiera escrito y enviado a mano).
    */
-  function toggleListening() {
+  async function toggleListening() {
+    setError(null);
     if (listening) {
-      recognitionRef.current?.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch (_) {}
+      setListening(false);
       return;
     }
     const Ctor = getSpeechRecognitionCtor();
@@ -133,44 +138,77 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
       return;
     }
 
-    const recognition = new Ctor();
-    recognition.lang = 'es-419';
-    recognition.continuous = false;
-    recognition.interimResults = true;
+    if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (err: unknown) {
+        const errName = (err as Error)?.name || '';
+        if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+          setError(
+            'Permiso de micrófono denegado. Haz clic en el ícono junto a la URL (http://...) y permite el acceso al micrófono.'
+          );
+          return;
+        }
+      }
+    }
 
-    recognition.onresult = (event) => {
-      let transcript = '';
-      let isFinal = false;
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        transcript += result[0].transcript;
-        if (result.isFinal) isFinal = true;
+    try {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (_) {}
+        recognitionRef.current = null;
       }
-      setInput(transcript);
-      if (isFinal && transcript.trim()) {
-        void sendMessage(transcript);
-      }
-    };
-    recognition.onerror = (event) => {
-      if (event.error === 'no-speech' || event.error === 'aborted') {
+
+      const recognition = new Ctor();
+      const userLang = navigator.language || 'es-ES';
+      recognition.lang = userLang.startsWith('es') ? userLang : 'es-ES';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setListening(true);
+        setError(null);
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = '';
+        let isFinal = false;
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          transcript += result[0].transcript;
+          if (result.isFinal) isFinal = true;
+        }
+        setInput(transcript);
+        if (isFinal && transcript.trim()) {
+          void sendMessage(transcript);
+        }
+      };
+      recognition.onerror = (event) => {
         setListening(false);
-        return;
-      }
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        setError('Permiso de micrófono denegado. Revisa los permisos del navegador.');
-      } else if (event.error === 'audio-capture') {
-        setError('No se detectó ningún micrófono conectado.');
-      } else {
-        setError('No se pudo escuchar el micrófono. Intenta de nuevo.');
-      }
-      setListening(false);
-    };
-    recognition.onend = () => setListening(false);
+        if (event.error === 'no-speech' || event.error === 'aborted') {
+          return;
+        }
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setError(
+            'Permiso de micrófono denegado. En Chrome, haz clic en el candado/ajustes a la izquierda de la URL (http://...) y cambia "Micrófono" a Permitir.'
+          );
+        } else if (event.error === 'audio-capture') {
+          setError('No se detectó ningún micrófono conectado.');
+        } else {
+          setError(`No se pudo escuchar el micrófono (${event.error}).`);
+        }
+      };
+      recognition.onend = () => setListening(false);
 
-    recognitionRef.current = recognition;
-    setError(null);
-    recognition.start();
-    setListening(true);
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error(err);
+      setListening(false);
+      setError('No se pudo activar el reconocimiento de voz. Verifica los permisos de tu navegador.');
+    }
   }
 
   return (

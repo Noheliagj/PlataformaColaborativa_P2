@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
+  AlertCircle,
   Bot,
   Check,
   ChevronLeft,
@@ -14,6 +15,7 @@ import {
   Sparkles,
   User,
   Wand2,
+  X,
 } from 'lucide-react';
 import type { ProjectChatMessage } from '../services/projects';
 
@@ -70,6 +72,7 @@ interface SpeechRecognitionLike extends EventTarget {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
+  onstart: (() => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
@@ -291,6 +294,7 @@ export function AiWorkspacePanel({
 }: AiWorkspacePanelProps) {
   const [input, setInput] = useState('');
   const [listening, setListening] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceSupported] = useState(() => getSpeechRecognitionCtor() !== null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -305,7 +309,9 @@ export function AiWorkspacePanel({
 
   useEffect(() => {
     return () => {
-      recognitionRef.current?.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch (_) {}
     };
   }, []);
 
@@ -338,39 +344,107 @@ export function AiWorkspacePanel({
     onSendMessage(SUMMARY_PROMPT);
   }
 
-  function toggleVoice() {
+  async function toggleVoice() {
+    setVoiceError(null);
+
     if (listening) {
-      recognitionRef.current?.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch (_) {}
+      setListening(false);
       return;
     }
+
     const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) return;
+    if (!Ctor) {
+      setVoiceError(
+        'Tu navegador no soporta Web Speech API. Se recomienda usar Google Chrome o Microsoft Edge.'
+      );
+      return;
+    }
 
-    const recognition = new Ctor();
-    recognition.lang = 'es-419';
-    recognition.continuous = false;
-    recognition.interimResults = true;
-
-    recognition.onresult = (event) => {
-      let transcript = '';
-      let isFinal = false;
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        transcript += result[0].transcript;
-        if (result.isFinal) isFinal = true;
+    // Solicitar permiso de audio explícito al navegador si está disponible
+    if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (err: unknown) {
+        const errName = (err as Error)?.name || '';
+        if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+          setVoiceError(
+            'Permiso de micrófono denegado. Haz clic en el ícono de ajustes a la izquierda de la URL (http://...) y permite el acceso al micrófono.'
+          );
+          return;
+        }
       }
-      setInput(transcript);
-      if (isFinal && transcript.trim()) {
-        onSendMessage(transcript.trim());
-        setInput('');
-      }
-    };
-    recognition.onerror = () => setListening(false);
-    recognition.onend = () => setListening(false);
+    }
 
-    recognitionRef.current = recognition;
-    recognition.start();
-    setListening(true);
+    try {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (_) {}
+        recognitionRef.current = null;
+      }
+
+      const recognition = new Ctor();
+      const userLang = navigator.language || 'es-ES';
+      recognition.lang = userLang.startsWith('es') ? userLang : 'es-ES';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setListening(true);
+        setVoiceError(null);
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = '';
+        let isFinal = false;
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          transcript += result[0].transcript;
+          if (result.isFinal) isFinal = true;
+        }
+        setInput(transcript);
+        if (isFinal && transcript.trim()) {
+          onSendMessage(transcript.trim());
+          setInput('');
+        }
+      };
+
+      recognition.onerror = (event: { error: string }) => {
+        setListening(false);
+        const err = event.error;
+        if (err === 'no-speech' || err === 'aborted') {
+          return;
+        }
+        if (err === 'not-allowed' || err === 'service-not-allowed') {
+          setVoiceError(
+            'Permiso de micrófono bloqueado por el navegador. En Chrome, haz clic en el candado/ícono a la izquierda de la URL (http://3.142.242.251) y cambia "Micrófono" a Permitir.'
+          );
+        } else if (err === 'audio-capture') {
+          setVoiceError('No se encontró ningún micrófono conectado en tu equipo.');
+        } else if (err === 'network') {
+          setVoiceError('Error de red al conectar con el servicio de voz de Google.');
+        } else {
+          setVoiceError(`Error del micrófono: ${err}`);
+        }
+      };
+
+      recognition.onend = () => {
+        setListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: unknown) {
+      console.error('Error al iniciar SpeechRecognition:', err);
+      setListening(false);
+      setVoiceError(
+        'No se pudo activar el reconocimiento de voz. Verifica los permisos de tu navegador.'
+      );
+    }
   }
 
   return (
@@ -618,6 +692,22 @@ export function AiWorkspacePanel({
             <span>Resumen de Avances</span>
           </button>
         </div>
+
+        {voiceError && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11.5px] text-amber-300">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={15} className="shrink-0 text-amber-400" />
+              <span>{voiceError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setVoiceError(null)}
+              className="text-amber-400 hover:text-white"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
           {voiceSupported && (
