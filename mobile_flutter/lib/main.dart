@@ -1607,6 +1607,8 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
         ),
       ),
     );
+  }
+}
 
 // =============================================================
 // PANTALLA 3: DASHBOARD DE MONITOREO EN TIEMPO REAL
