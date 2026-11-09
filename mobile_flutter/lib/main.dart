@@ -1596,8 +1596,8 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
       // Calcular detalle exacto de cambios en el lienzo
       String changeDetail = '';
       if (!wasEmpty && payload['isInitial'] != true) {
-        final oldNames = _classes.map((c) => c.name.trim()).toSet();
-        final newNames = newClasses.map((c) => c.name.trim()).toSet();
+        final oldNames = _classes.map((c) => c.className.trim()).toSet();
+        final newNames = newClasses.map((c) => c.className.trim()).toSet();
         final added = newNames.difference(oldNames).toList();
         final removed = oldNames.difference(newNames).toList();
 
