@@ -50,11 +50,17 @@ const JAVA_TYPE_MAP: Record<string, string> = {
   float: 'Double',
   double: 'Double',
   decimal: 'BigDecimal',
+  bigdecimal: 'BigDecimal',
   boolean: 'Boolean',
   bool: 'Boolean',
   date: 'LocalDate',
+  localdate: 'LocalDate',
   datetime: 'LocalDateTime',
+  localdatetime: 'LocalDateTime',
   timestamp: 'LocalDateTime',
+  time: 'LocalTime',
+  localtime: 'LocalTime',
+  uuid: 'UUID',
 };
 
 @Injectable()
@@ -299,22 +305,31 @@ function applyOneToMany(
   many: EntityBuilder,
   relationName?: string,
 ) {
+  const isPluralRel = Boolean(
+    relationName && (relationName.endsWith('s') || relationName.endsWith('es')),
+  );
   const ownerField = uniqueName(
-    relationName ? toCamelCase(relationName) : toCamelCase(one.className),
+    relationName && !isPluralRel
+      ? toCamelCase(relationName)
+      : toCamelCase(one.className),
     many.usedFieldNames,
   );
   const collectionField = uniqueName(
-    pluralize(toCamelCase(many.className)),
+    relationName && isPluralRel
+      ? toCamelCase(relationName)
+      : pluralize(toCamelCase(many.className)),
     one.usedFieldNames,
   );
 
   many.extraImports.add('jakarta.persistence.*');
+  many.extraImports.add('com.fasterxml.jackson.annotation.JsonIgnoreProperties');
   many.fields.push({
     name: ownerField,
     type: one.className,
     annotationLines: [
       '@ManyToOne',
       `@JoinColumn(name = "${toSnakeCase(ownerField)}_id")`,
+      `@JsonIgnoreProperties("${collectionField}")`,
     ],
   });
 
@@ -396,10 +411,14 @@ function applyManyToMany(
   });
 
   inverse.extraImports.add('java.util.List');
+  inverse.extraImports.add('com.fasterxml.jackson.annotation.JsonIgnoreProperties');
   inverse.fields.push({
     name: inverseField,
     type: `List<${owner.className}>`,
-    annotationLines: [`@ManyToMany(mappedBy = "${ownerField}")`],
+    annotationLines: [
+      `@ManyToMany(mappedBy = "${ownerField}")`,
+      `@JsonIgnoreProperties("${ownerField}")`,
+    ],
   });
 }
 
@@ -634,6 +653,8 @@ function registerImportForType(builder: EntityBuilder, type: string) {
     BigDecimal: 'java.math.BigDecimal',
     LocalDate: 'java.time.LocalDate',
     LocalDateTime: 'java.time.LocalDateTime',
+    LocalTime: 'java.time.LocalTime',
+    UUID: 'java.util.UUID',
   };
   const imp = importsByType[type];
   if (imp) builder.extraImports.add(imp);
@@ -669,6 +690,7 @@ function toSnakeCase(pascalOrCamel: string): string {
 }
 
 function pluralize(word: string): string {
+  if (word.endsWith('s') || word.endsWith('es')) return word;
   if (/[sxz]$|[cs]h$/i.test(word)) return `${word}es`;
   if (/[^aeiou]y$/i.test(word)) return `${word.slice(0, -1)}ies`;
   return `${word}s`;
