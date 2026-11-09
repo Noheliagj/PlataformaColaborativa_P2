@@ -2780,7 +2780,13 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
         for (final nc in newClasses) {
           final matchedById = oldClasses.firstWhere(
             (oc) => oc.id.isNotEmpty && oc.id == nc.id,
-            orElse: () => UmlClass(id: '', className: '', attributes: [], methods: [], x: 0, y: 0),
+            orElse: () => UmlClass(
+              id: '',
+              className: '',
+              isAssociative: false,
+              attributes: [],
+              methods: [],
+            ),
           );
           if (matchedById.id.isNotEmpty &&
               matchedById.className.trim().isNotEmpty &&
@@ -2817,22 +2823,32 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
             );
             if (!identical(oc, nc)) {
               // Comparar atributos
-              final newAttrs = nc.attributes.toSet().difference(oc.attributes.toSet()).toList();
-              final remAttrs = oc.attributes.toSet().difference(nc.attributes.toSet()).toList();
+              final newAttrs = nc.attributes
+                  .where((na) => !oc.attributes.any((oa) => oa.name == na.name && oa.type == na.type))
+                  .toList();
+              final remAttrs = oc.attributes
+                  .where((oa) => !nc.attributes.any((na) => na.name == oa.name && na.type == oa.type))
+                  .toList();
 
               if (newAttrs.isNotEmpty) {
-                final preview = newAttrs.first.length > 25 ? '${newAttrs.first.substring(0, 22)}...' : newAttrs.first;
+                final attrName = newAttrs.first.name;
+                final preview = attrName.length > 25 ? '${attrName.substring(0, 22)}...' : attrName;
                 specificChanges.add('Agregó atributo "$preview" en "${nc.className}"');
               } else if (remAttrs.isNotEmpty) {
                 specificChanges.add('Eliminó ${remAttrs.length} atributo(s) de "${nc.className}"');
               }
 
               // Comparar métodos
-              final newMeths = nc.methods.toSet().difference(oc.methods.toSet()).toList();
-              final remMeths = oc.methods.toSet().difference(nc.methods.toSet()).toList();
+              final newMeths = nc.methods
+                  .where((nm) => !oc.methods.any((om) => om.name == nm.name && om.returnType == nm.returnType))
+                  .toList();
+              final remMeths = oc.methods
+                  .where((om) => !nc.methods.any((nm) => nm.name == om.name && nm.returnType == om.returnType))
+                  .toList();
 
               if (newMeths.isNotEmpty) {
-                final preview = newMeths.first.length > 25 ? '${newMeths.first.substring(0, 22)}...' : newMeths.first;
+                final methName = newMeths.first.name;
+                final preview = methName.length > 25 ? '${methName.substring(0, 22)}...' : methName;
                 specificChanges.add('Agregó método "$preview" en "${nc.className}"');
               } else if (remMeths.isNotEmpty) {
                 specificChanges.add('Eliminó ${remMeths.length} método(s) de "${nc.className}"');
