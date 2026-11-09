@@ -357,6 +357,7 @@ export class ProjectsService {
     }
 
     const { project } = await this.getAccessibleOrThrow(userId, id);
+    let detectedChangeDetail = 'guardó cambios en el diagrama';
 
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -371,6 +372,38 @@ export class ProjectsService {
             error: 'Not Found',
           });
         }
+
+        try {
+          const prevClasses = await tx.classNode.findMany({
+            where: { diagramId: diagram.id },
+            select: { name: true },
+          });
+          const prevNames = new Set(prevClasses.map((c) => c.name.trim()));
+          const newNames = new Set(
+            (dto.nodes ?? [])
+              .map((n) => n.data?.name?.trim())
+              .filter(Boolean),
+          );
+
+          const added = [...newNames].filter((n) => !prevNames.has(n));
+          const removed = [...prevNames].filter((n) => !newNames.has(n));
+
+          if (added.length > 0 && removed.length === 0) {
+            detectedChangeDetail =
+              added.length === 1
+                ? `añadió la clase "${added[0]}"`
+                : `añadió ${added.length} clases (${added.join(', ')})`;
+          } else if (removed.length > 0 && added.length === 0) {
+            detectedChangeDetail =
+              removed.length === 1
+                ? `eliminó la clase "${removed[0]}"`
+                : `eliminó ${removed.length} clases (${removed.join(', ')})`;
+          } else if (added.length > 0 && removed.length > 0) {
+            detectedChangeDetail = `añadió ${added.join(', ')} y eliminó ${removed.join(', ')}`;
+          } else {
+            detectedChangeDetail = 'modificó la estructura o atributos del diagrama';
+          }
+        } catch (_) {}
 
         // Las relaciones se borran antes que las clases por las FKs; borrar
         // las clases además arrastra en cascada sus atributos/métodos.
@@ -568,7 +601,7 @@ export class ProjectsService {
         ownerId: project.ownerId,
         projectId: id,
         type: 'DIAGRAM_SAVED',
-        message: `${saverName} guardó cambios en "${project.name}"`,
+        message: `${saverName} ${detectedChangeDetail} en "${project.name}"`,
       });
     }
 
@@ -576,7 +609,7 @@ export class ProjectsService {
     this.notifications.notifyRoom({
       projectId: id,
       type: 'DIAGRAM_SAVED',
-      message: `${saverName} ha actualizado el diagrama`,
+      message: `${saverName} ${detectedChangeDetail}`,
       userId,
       userName: saverName,
     });

@@ -1592,17 +1592,51 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
           fromLower.startsWith('ia ') ||
           fromLower.startsWith('ai-') ||
           fromLower.contains('claude');
+
+      // Calcular detalle exacto de cambios en el lienzo
+      String changeDetail = '';
+      if (!wasEmpty && payload['isInitial'] != true) {
+        final oldNames = _classes.map((c) => c.name.trim()).toSet();
+        final newNames = newClasses.map((c) => c.name.trim()).toSet();
+        final added = newNames.difference(oldNames).toList();
+        final removed = oldNames.difference(newNames).toList();
+
+        if (added.isNotEmpty && removed.isEmpty) {
+          changeDetail = added.length == 1
+              ? 'Añadió la clase "${added.first}"'
+              : 'Añadió ${added.length} clases (${added.join(', ')})';
+        } else if (removed.isNotEmpty && added.isEmpty) {
+          changeDetail = removed.length == 1
+              ? 'Eliminó la clase "${removed.first}"'
+              : 'Eliminó ${removed.length} clases (${removed.join(', ')})';
+        } else if (added.isNotEmpty && removed.isNotEmpty) {
+          changeDetail = 'Añadió ${added.join(', ')} y eliminó ${removed.join(', ')}';
+        } else if (newEdges.length != _edges.length) {
+          final diff = newEdges.length - _edges.length;
+          changeDetail = diff > 0
+              ? 'Agregó $diff relación(es)'
+              : 'Eliminó ${-diff} relación(es)';
+        } else {
+          changeDetail = 'Modificó atributos/métodos del diagrama';
+        }
+      } else {
+        changeDetail = 'Sincronizado (${newClasses.length} clases, ${newEdges.length} relaciones)';
+      }
+
+      final activityTitle = isAi ? 'IA: Generación / Cambio' : '$fromUser';
+      final activitySubtitle = changeDetail;
+
       _addActivity(
-        'Actualización del Lienzo',
-        'Por: $fromUser (${newClasses.length} clases, ${newEdges.length} relaciones)',
+        activityTitle,
+        activitySubtitle,
         isAi: isAi,
       );
 
       if (payload['isInitial'] != true) {
         _showFloatingBanner(
-          title: 'Lienzo Actualizado',
-          message: 'Por: $fromUser (${newClasses.length} clases, ${newEdges.length} relaciones)',
-          icon: isAi ? Icons.auto_awesome_rounded : Icons.hub_outlined,
+          title: activityTitle,
+          message: activitySubtitle,
+          icon: isAi ? Icons.auto_awesome_rounded : Icons.edit_note_rounded,
           accentColor: isAi ? const Color(0xFFA855F7) : const Color(0xFF38BDF8),
         );
       }
