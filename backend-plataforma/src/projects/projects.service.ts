@@ -321,6 +321,114 @@ export class ProjectsService {
     );
   }
 
+  /** Métricas reales de arquitectura y colaboración para el Dashboard */
+  async getDashboardStats(userId: string) {
+    const [owned, memberships] = await Promise.all([
+      this.prisma.project.findMany({
+        where: { ownerId: userId },
+        select: { id: true },
+      }),
+      this.prisma.projectMember.findMany({
+        where: { userId },
+        select: { projectId: true },
+      }),
+    ]);
+
+    const ownedIds = owned.map((p) => p.id);
+    const memberIds = memberships.map((m) => m.projectId);
+    const allProjectIds = [...new Set([...ownedIds, ...memberIds])];
+
+    if (allProjectIds.length === 0) {
+      return {
+        ownedProjects: 0,
+        collabProjects: 0,
+        totalProjects: 0,
+        totalClasses: 0,
+        totalRelationships: 0,
+        totalCollaborators: 0,
+      };
+    }
+
+    const diagrams = await this.prisma.diagram.findMany({
+      where: { projectId: { in: allProjectIds } },
+      select: { id: true },
+    });
+    const diagramIds = diagrams.map((d) => d.id);
+
+    const [totalClasses, totalRelationships, allMembers] = await Promise.all([
+      diagramIds.length > 0
+        ? this.prisma.classNode.count({
+            where: { diagramId: { in: diagramIds } },
+          })
+        : 0,
+      diagramIds.length > 0
+        ? this.prisma.relationship.count({
+            where: { diagramId: { in: diagramIds } },
+          })
+        : 0,
+      this.prisma.projectMember.findMany({
+        where: { projectId: { in: allProjectIds } },
+        select: { userId: true },
+      }),
+    ]);
+
+    const uniqueCollaborators = new Set(
+      allMembers.map((m) => m.userId).filter((id) => id !== userId),
+    ).size;
+
+    return {
+      ownedProjects: ownedIds.length,
+      collabProjects: memberIds.length,
+      totalProjects: allProjectIds.length,
+      totalClasses,
+      totalRelationships,
+      totalCollaborators: uniqueCollaborators,
+    };
+  }
+
+  /** Feed global de actividad reciente de todos los proyectos del usuario */
+  async getRecentActivities(userId: string, limit = 10) {
+    const [owned, memberships] = await Promise.all([
+      this.prisma.project.findMany({
+        where: { ownerId: userId },
+        select: { id: true },
+      }),
+      this.prisma.projectMember.findMany({
+        where: { userId },
+        select: { projectId: true },
+      }),
+    ]);
+
+    const allProjectIds = [
+      ...new Set([
+        ...owned.map((p) => p.id),
+        ...memberships.map((m) => m.projectId),
+      ]),
+    ];
+
+    if (allProjectIds.length === 0) {
+      return [];
+    }
+
+    const activities = await this.prisma.projectActivity.findMany({
+      where: { projectId: { in: allProjectIds } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        project: { select: { id: true, name: true } },
+      },
+    });
+
+    return activities.map((act) => ({
+      id: act.id,
+      action: act.action,
+      createdAt: act.createdAt,
+      user: act.user,
+      project: act.project,
+    }));
+  }
+
   /** Proyecto individual (incluye el diagrama) para dueño o colaborador. */
   async findOneAccessible(
     userId: string,
@@ -383,17 +491,34 @@ export class ProjectsService {
             where: { diagramId: diagram.id },
           });
 
-          const prevNames = new Set(prevClasses.map((c) => c.name.trim()));
-          const newNames = new Set(
+          const prevNames = new Set<string>(
+            prevClasses.map((c) => c.name.trim()),
+          );
+          const newNames = new Set<string>(
             (dto.nodes ?? [])
               .map((n) => n.data?.name?.trim())
-              .filter(Boolean),
+              .filter((n): n is string => Boolean(n)),
           );
 
           const added = [...newNames].filter((n) => !prevNames.has(n));
           const removed = [...prevNames].filter((n) => !newNames.has(n));
 
-          if (added.length > 0 && removed.length === 0) {
+          // Detección de renombramiento de clase (mismo ID de nodo pero nuevo nombre)
+          let renamedClassDetail: string | null = null;
+          for (const newNode of dto.nodes ?? []) {
+            const newNodeName = newNode.data?.name?.trim();
+            if (!newNodeName) continue;
+            const prevClass = prevClasses.find((c) => c.id === newNode.id);
+            if (prevClass && prevClass.name.trim() !== newNodeName) {
+              renamedClassDetail = `renombró la clase "${prevClass.name.trim()}" a "${newNodeName}"`;
+              break;
+            }
+          }
+
+          if (renamedClassDetail) {
+            hasStructuralChange = true;
+            detectedChangeDetail = renamedClassDetail;
+          } else if (added.length > 0 && removed.length === 0) {
             hasStructuralChange = true;
             detectedChangeDetail =
               added.length === 1
@@ -429,6 +554,17 @@ export class ProjectsService {
                 } else if (newAttrs.length < prevAttrsCount) {
                   const diff = prevAttrsCount - newAttrs.length;
                   details.push(`eliminó ${diff} atributo(s) de "${nodeName}"`);
+                } else {
+                  // Mismo conteo: verificar si el contenido de los atributos cambió
+                  const prevAttrLines = prevClass.attributes.map(
+                    (a) => `${a.visibility || ''}${a.name}:${a.type || ''}`,
+                  );
+                  const isModified = newAttrs.some(
+                    (raw: string, idx: number) => raw !== prevAttrLines[idx],
+                  );
+                  if (isModified) {
+                    details.push(`actualizó atributos de "${nodeName}"`);
+                  }
                 }
 
                 const newMethods = (newNode.data?.methods ?? [])
@@ -441,6 +577,16 @@ export class ProjectsService {
                 } else if (newMethods.length < prevMethodsCount) {
                   const diff = prevMethodsCount - newMethods.length;
                   details.push(`eliminó ${diff} método(s) de "${nodeName}"`);
+                } else {
+                  const prevMethLines = prevClass.methods.map(
+                    (m) => `${m.visibility || ''}${m.name}()`,
+                  );
+                  const isModified = newMethods.some(
+                    (raw: string, idx: number) => !raw.includes(prevMethLines[idx] || '___none___'),
+                  );
+                  if (isModified) {
+                    details.push(`actualizó métodos de "${nodeName}"`);
+                  }
                 }
               }
             }

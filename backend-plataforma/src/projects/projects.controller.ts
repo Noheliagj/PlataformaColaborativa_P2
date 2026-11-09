@@ -42,6 +42,18 @@ export class ProjectsController {
     return this.projects.findAllForUser(user.id);
   }
 
+  // GET /projects/stats/summary -> Estadísticas de arquitectura para el dashboard
+  @Get('stats/summary')
+  getStatsSummary(@CurrentUser() user: AuthUser) {
+    return this.projects.getDashboardStats(user.id);
+  }
+
+  // GET /projects/feed/recent-activities -> Feed global de actividad multi-proyecto
+  @Get('feed/recent-activities')
+  getRecentActivities(@CurrentUser() user: AuthUser) {
+    return this.projects.getRecentActivities(user.id);
+  }
+
   // GET /projects/:id -> proyecto individual con su modelData (dueño o colaborador)
   @Get(':id')
   findOne(@CurrentUser() user: AuthUser, @Param('id') id: string) {

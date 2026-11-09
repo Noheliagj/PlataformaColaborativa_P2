@@ -235,6 +235,108 @@ class ProjectItem {
   }
 }
 
+class GlobalActivityItem {
+  final String id;
+  final String action;
+  final DateTime createdAt;
+  final String userName;
+  final String projectId;
+  final String projectName;
+
+  GlobalActivityItem({
+    required this.id,
+    required this.action,
+    required this.createdAt,
+    required this.userName,
+    required this.projectId,
+    required this.projectName,
+  });
+
+  factory GlobalActivityItem.fromMap(Map<String, dynamic> map) {
+    DateTime dt;
+    try {
+      dt = DateTime.parse(map['createdAt']?.toString() ?? '');
+    } catch (_) {
+      dt = DateTime.now();
+    }
+    return GlobalActivityItem(
+      id: map['id']?.toString() ?? '',
+      action: map['action']?.toString() ?? 'SAVE_DIAGRAM',
+      createdAt: dt,
+      userName: map['user']?['name']?.toString() ?? 'Colaborador',
+      projectId: map['project']?['id']?.toString() ?? '',
+      projectName: map['project']?['name']?.toString() ?? 'Proyecto',
+    );
+  }
+}
+
+class DashboardStats {
+  final int ownedProjects;
+  final int collabProjects;
+  final int totalProjects;
+  final int totalClasses;
+  final int totalRelationships;
+  final int totalCollaborators;
+
+  DashboardStats({
+    required this.ownedProjects,
+    required this.collabProjects,
+    required this.totalProjects,
+    required this.totalClasses,
+    required this.totalRelationships,
+    required this.totalCollaborators,
+  });
+
+  factory DashboardStats.fromMap(Map<String, dynamic> map) {
+    return DashboardStats(
+      ownedProjects: (map['ownedProjects'] as num?)?.toInt() ?? 0,
+      collabProjects: (map['collabProjects'] as num?)?.toInt() ?? 0,
+      totalProjects: (map['totalProjects'] as num?)?.toInt() ?? 0,
+      totalClasses: (map['totalClasses'] as num?)?.toInt() ?? 0,
+      totalRelationships: (map['totalRelationships'] as num?)?.toInt() ?? 0,
+      totalCollaborators: (map['totalCollaborators'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class InAppNotificationItem {
+  final String id;
+  final String type;
+  final String message;
+  final bool read;
+  final DateTime createdAt;
+  final String projectId;
+  final String projectName;
+
+  InAppNotificationItem({
+    required this.id,
+    required this.type,
+    required this.message,
+    required this.read,
+    required this.createdAt,
+    required this.projectId,
+    required this.projectName,
+  });
+
+  factory InAppNotificationItem.fromMap(Map<String, dynamic> map) {
+    DateTime dt;
+    try {
+      dt = DateTime.parse(map['createdAt']?.toString() ?? '');
+    } catch (_) {
+      dt = DateTime.now();
+    }
+    return InAppNotificationItem(
+      id: map['id']?.toString() ?? '',
+      type: map['type']?.toString() ?? 'INFO',
+      message: map['message']?.toString() ?? '',
+      read: map['read'] == true,
+      createdAt: dt,
+      projectId: map['projectId']?.toString() ?? map['project']?['id']?.toString() ?? '',
+      projectName: map['project']?['name']?.toString() ?? 'Proyecto',
+    );
+  }
+}
+
 class UmlAttribute {
   final String name;
   final String type;
@@ -916,22 +1018,52 @@ class ProjectsListScreen extends StatefulWidget {
 
 class _ProjectsListScreenState extends State<ProjectsListScreen> {
   List<ProjectItem> _projects = [];
+  List<GlobalActivityItem> _recentActivities = [];
+  DashboardStats? _dashboardStats;
+  List<InAppNotificationItem> _notifications = [];
   bool _isLoading = true;
   String? _errorMessage;
   String _searchQuery = '';
+  String _roleFilter = 'ALL'; // 'ALL', 'OWNER', 'COLLABORATOR'
+
+  int get _unreadNotificationsCount =>
+      _notifications.where((n) => !n.read).length;
 
   @override
   void initState() {
     super.initState();
-    _fetchProjects();
+    _fetchDashboardData();
   }
 
-  Future<void> _fetchProjects() async {
+  String _formatTimeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Ahora';
+    if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes}m';
+    if (diff.inHours < 24) return 'Hace ${diff.inHours}h';
+    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _fetchDashboardData() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
+    await Future.wait([
+      _fetchProjects(),
+      _fetchStats(),
+      _fetchRecentActivities(),
+      _fetchNotifications(),
+    ]);
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchProjects() async {
     try {
       final url = Uri.parse('http://${widget.serverIp}:${widget.serverPort}/projects');
       final response = await http.get(
@@ -945,28 +1077,371 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body);
         final loaded = list.map((p) => ProjectItem.fromMap(p)).toList();
-        setState(() {
-          _projects = loaded;
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _projects = loaded;
+          });
+        }
       } else {
-        setState(() {
-          _errorMessage = 'Error ${response.statusCode}: No se pudieron cargar los proyectos';
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Error ${response.statusCode}: No se pudieron cargar los proyectos';
+          });
+        }
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'No se pudo conectar con el servidor: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'No se pudo conectar con el servidor: $e';
+        });
+      }
     }
   }
 
+  Future<void> _fetchStats() async {
+    try {
+      final url = Uri.parse('http://${widget.serverIp}:${widget.serverPort}/projects/stats/summary');
+      final res = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      ).timeout(const Duration(seconds: 6));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (mounted && data is Map<String, dynamic>) {
+          setState(() {
+            _dashboardStats = DashboardStats.fromMap(data);
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _fetchRecentActivities() async {
+    try {
+      final url = Uri.parse('http://${widget.serverIp}:${widget.serverPort}/projects/feed/recent-activities');
+      final res = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      ).timeout(const Duration(seconds: 6));
+
+      if (res.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(res.body);
+        if (mounted) {
+          setState(() {
+            _recentActivities = list.map((a) => GlobalActivityItem.fromMap(a)).toList();
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _fetchNotifications() async {
+    try {
+      final url = Uri.parse('http://${widget.serverIp}:${widget.serverPort}/notifications');
+      final res = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      ).timeout(const Duration(seconds: 6));
+
+      if (res.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(res.body);
+        if (mounted) {
+          setState(() {
+            _notifications = list.map((n) => InAppNotificationItem.fromMap(n)).toList();
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _markAllNotificationsAsRead() async {
+    try {
+      final url = Uri.parse('http://${widget.serverIp}:${widget.serverPort}/notifications/read-all');
+      await http.patch(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _notifications = _notifications
+              .map((n) => InAppNotificationItem(
+                    id: n.id,
+                    type: n.type,
+                    message: n.message,
+                    read: true,
+                    createdAt: n.createdAt,
+                    projectId: n.projectId,
+                    projectName: n.projectName,
+                  ))
+              .toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _markNotificationAsRead(String id) async {
+    try {
+      final url = Uri.parse('http://${widget.serverIp}:${widget.serverPort}/notifications/$id/read');
+      await http.patch(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _notifications = _notifications
+              .map((n) => n.id == id
+                  ? InAppNotificationItem(
+                      id: n.id,
+                      type: n.type,
+                      message: n.message,
+                      read: true,
+                      createdAt: n.createdAt,
+                      projectId: n.projectId,
+                      projectName: n.projectName,
+                    )
+                  : n)
+              .toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _openNotificationsSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.75,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF334155),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'Notificaciones',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          if (_unreadNotificationsCount > 0) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0x3338BDF8),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFF38BDF8)),
+                              ),
+                              child: Text(
+                                '$_unreadNotificationsCount nuevas',
+                                style: const TextStyle(
+                                  color: Color(0xFF38BDF8),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (_unreadNotificationsCount > 0)
+                        TextButton(
+                          onPressed: () async {
+                            await _markAllNotificationsAsRead();
+                            setModalState(() {});
+                          },
+                          child: const Text(
+                            'Marcar leídas',
+                            style: TextStyle(
+                              color: Color(0xFF38BDF8),
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(color: Color(0xFF1E293B), height: 1),
+                  const SizedBox(height: 8),
+                  if (_notifications.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.notifications_off_outlined, color: Color(0xFF475569), size: 40),
+                            SizedBox(height: 10),
+                            Text(
+                              'Sin notificaciones pendientes',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Te avisaremos cuando haya cambios o invitaciones en tus proyectos.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: _notifications.length,
+                        itemBuilder: (context, idx) {
+                          final notif = _notifications[idx];
+                          final isUnread = !notif.read;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            decoration: BoxDecoration(
+                              color: isUnread
+                                  ? const Color(0xFF1E293B).withOpacity(0.6)
+                                  : const Color(0xFF111827),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: isUnread
+                                    ? const Color(0xFF38BDF8).withOpacity(0.4)
+                                    : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              leading: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: notif.type == 'DIAGRAM_SAVED'
+                                      ? const Color(0x2610B981)
+                                      : const Color(0x2638BDF8),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  notif.type == 'DIAGRAM_SAVED'
+                                      ? Icons.save_outlined
+                                      : Icons.notifications_active_outlined,
+                                  color: notif.type == 'DIAGRAM_SAVED'
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFF38BDF8),
+                                  size: 18,
+                                ),
+                              ),
+                              title: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      notif.projectName,
+                                      style: TextStyle(
+                                        color: isUnread ? Colors.white : const Color(0xFF94A3B8),
+                                        fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatTimeAgo(notif.createdAt),
+                                    style: const TextStyle(
+                                      color: Color(0xFF64748B),
+                                      fontSize: 10.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  notif.message,
+                                  style: TextStyle(
+                                    color: isUnread ? Colors.white70 : const Color(0xFF64748B),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              onTap: () async {
+                                if (isUnread) {
+                                  await _markNotificationAsRead(notif.id);
+                                  setModalState(() {});
+                                }
+                                Navigator.pop(ctx);
+                                final targetProject = _projects.cast<ProjectItem?>().firstWhere(
+                                      (p) => p?.id == notif.projectId,
+                                      orElse: () => null,
+                                    );
+                                if (targetProject != null) {
+                                  _navigateToMonitor(targetProject);
+                                }
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   List<ProjectItem> get _filteredProjects {
-    if (_searchQuery.trim().isEmpty) return _projects;
+    var list = _projects;
+    if (_roleFilter == 'OWNER') {
+      list = list.where((p) => p.role.toUpperCase() == 'OWNER').toList();
+    } else if (_roleFilter == 'COLLABORATOR') {
+      list = list.where((p) => p.role.toUpperCase() == 'COLLABORATOR').toList();
+    }
+    if (_searchQuery.trim().isEmpty) return list;
     final q = _searchQuery.toLowerCase();
-    return _projects
+    return list
         .where((p) => p.name.toLowerCase().contains(q) || p.description.toLowerCase().contains(q))
         .toList();
   }
@@ -990,12 +1465,12 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
     final firstName = widget.userName.trim().isNotEmpty
         ? widget.userName.trim().split(' ').first
         : 'Colega';
-    final projectCount = _projects.length;
-    final formattedProjects = projectCount.toString().padLeft(2, '0');
-    // Estimación dinámica de colaboradores involucrados en los proyectos
-    final collaboratorsCount = (projectCount > 0 ? (projectCount * 2 + 2) : 0)
-        .toString()
-        .padLeft(2, '0');
+
+    // Estadísticas funcionales reales calculadas a partir del rol
+    final ownedCount = _projects.where((p) => p.role.toUpperCase() == 'OWNER').length;
+    final collabCount = _projects.where((p) => p.role.toUpperCase() == 'COLLABORATOR').length;
+    final formattedOwned = ownedCount.toString().padLeft(2, '0');
+    final formattedCollab = collabCount.toString().padLeft(2, '0');
 
     final recentProjectName = _projects.isNotEmpty
         ? _projects.first.name
@@ -1018,6 +1493,50 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
           ),
         ),
         actions: [
+          // Botón Notificaciones (Campana con badge)
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF111827),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF1F2937)),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.notifications_outlined, color: Colors.white, size: 20),
+                  tooltip: 'Notificaciones',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+                  onPressed: _openNotificationsSheet,
+                ),
+              ),
+              if (_unreadNotificationsCount > 0)
+                Positioned(
+                  top: 4,
+                  right: 2,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFEF4444),
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      _unreadNotificationsCount > 9 ? '9+' : '$_unreadNotificationsCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 8),
           Container(
             margin: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(
@@ -1030,7 +1549,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
               tooltip: 'Recargar',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
-              onPressed: _fetchProjects,
+              onPressed: _fetchDashboardData,
             ),
           ),
           const SizedBox(width: 8),
@@ -1055,7 +1574,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
       body: RefreshIndicator(
         color: const Color(0xFF38BDF8),
         backgroundColor: const Color(0xFF111827),
-        onRefresh: _fetchProjects,
+        onRefresh: _fetchDashboardData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
@@ -1074,11 +1593,184 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
               const SizedBox(height: 18),
 
               // ==========================================
-              // 1. CARDS DE ESTADÍSTICAS / MÉTRICAS
+              // 1. CARDS DE ESTADÍSTICAS / MÉTRICAS REALES (2x2)
               // ==========================================
               Row(
                 children: [
-                  // Card Proyectos
+                  // Card Proyectos Propios (Filtrable al pulsar)
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _roleFilter = _roleFilter == 'OWNER' ? 'ALL' : 'OWNER';
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF111827),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: _roleFilter == 'OWNER'
+                                ? const Color(0xFF38BDF8)
+                                : const Color(0xFF1F2937),
+                            width: _roleFilter == 'OWNER' ? 2 : 1.2,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x1F38BDF8),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0x3338BDF8)),
+                                  ),
+                                  child: const Icon(
+                                    Icons.folder_outlined,
+                                    color: Color(0xFF38BDF8),
+                                    size: 20,
+                                  ),
+                                ),
+                                if (_roleFilter == 'OWNER')
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0x3338BDF8),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'Filtro',
+                                      style: TextStyle(
+                                        color: Color(0xFF38BDF8),
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              formattedOwned,
+                              style: const TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: -1,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Proyectos propios',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF94A3B8),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+
+                  // Card Colaboraciones (Filtrable al pulsar)
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _roleFilter = _roleFilter == 'COLLABORATOR' ? 'ALL' : 'COLLABORATOR';
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF111827),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: _roleFilter == 'COLLABORATOR'
+                                ? const Color(0xFFA855F7)
+                                : const Color(0xFF1F2937),
+                            width: _roleFilter == 'COLLABORATOR' ? 2 : 1.2,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x1FA855F7),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0x33A855F7)),
+                                  ),
+                                  child: const Icon(
+                                    Icons.group_work_outlined,
+                                    color: Color(0xFFA855F7),
+                                    size: 20,
+                                  ),
+                                ),
+                                if (_roleFilter == 'COLLABORATOR')
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0x33A855F7),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'Filtro',
+                                      style: TextStyle(
+                                        color: Color(0xFFA855F7),
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              formattedCollab,
+                              style: const TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: -1,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Colaboraciones',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF94A3B8),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Fila 2 de Métricas: Clases y Relaciones UML (Estadísticas reales de Arquitectura)
+              Row(
+                children: [
+                  // Card Clases UML
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(16),
@@ -1093,21 +1785,21 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0x1F38BDF8),
+                              color: const Color(0x1F10B981),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0x3338BDF8)),
+                              border: Border.all(color: const Color(0x3310B981)),
                             ),
                             child: const Icon(
-                              Icons.folder_outlined,
-                              color: Color(0xFF38BDF8),
+                              Icons.widgets_outlined,
+                              color: Color(0xFF10B981),
                               size: 20,
                             ),
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            formattedProjects,
+                            (_dashboardStats?.totalClasses ?? 0).toString().padLeft(2, '0'),
                             style: const TextStyle(
-                              fontSize: 32,
+                              fontSize: 30,
                               fontWeight: FontWeight.w900,
                               color: Colors.white,
                               letterSpacing: -1,
@@ -1115,7 +1807,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Proyectos',
+                            'Clases modeladas',
                             style: TextStyle(
                               fontSize: 12,
                               color: Color(0xFF94A3B8),
@@ -1128,7 +1820,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                   ),
                   const SizedBox(width: 14),
 
-                  // Card Colaboradores
+                  // Card Relaciones UML
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(16),
@@ -1143,21 +1835,21 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0x1FA855F7),
+                              color: const Color(0x1FF59E0B),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0x33A855F7)),
+                              border: Border.all(color: const Color(0x33F59E0B)),
                             ),
                             child: const Icon(
-                              Icons.people_outline_rounded,
-                              color: Color(0xFFA855F7),
+                              Icons.alt_route_rounded,
+                              color: Color(0xFFF59E0B),
                               size: 20,
                             ),
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            collaboratorsCount,
+                            (_dashboardStats?.totalRelationships ?? 0).toString().padLeft(2, '0'),
                             style: const TextStyle(
-                              fontSize: 32,
+                              fontSize: 30,
                               fontWeight: FontWeight.w900,
                               color: Colors.white,
                               letterSpacing: -1,
@@ -1165,7 +1857,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Colaboradores',
+                            'Relaciones UML',
                             style: TextStyle(
                               fontSize: 12,
                               color: Color(0xFF94A3B8),
@@ -1181,7 +1873,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
               const SizedBox(height: 26),
 
               // ==========================================
-              // 2. ACTIVIDAD DE TUS PROYECTOS (EN VIVO)
+              // 2. ACTIVIDAD DE TUS PROYECTOS (FEED REAL)
               // ==========================================
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1229,7 +1921,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Contenedor principal de Actividad
+              // Contenedor principal de Actividad Dinámica
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
@@ -1237,174 +1929,149 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: const Color(0xFF1F2937), width: 1.2),
                 ),
-                child: Column(
-                  children: [
-                    // Item 1: Proyecto + Modificación de diagrama
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0x1F38BDF8),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.account_tree_outlined,
-                            color: Color(0xFF38BDF8),
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
+                child: _recentActivities.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    recentProjectName,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const Text(
-                                    'Ahora',
-                                    style: TextStyle(
-                                      color: Color(0xFF64748B),
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: const [
-                                  Icon(Icons.person_outline_rounded,
-                                      color: Color(0xFF94A3B8), size: 14),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Colaborador modificó el diagrama',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              const Text(
-                                'Actualizó las relaciones entre clases.',
-                                style: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 11.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Divider(color: Color(0xFF1F2937), height: 1),
-                    ),
-
-                    // Item 2: Propuesta de IA
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0x1FA855F7),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.auto_awesome_rounded,
-                            color: Color(0xFFA855F7),
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: const [
+                              Icon(Icons.history_toggle_off_rounded, color: Color(0xFF64748B), size: 36),
+                              SizedBox(height: 10),
                               Text(
-                                'La IA generó una propuesta',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 13,
-                                ),
+                                'Sin actividad reciente',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                               ),
-                              SizedBox(height: 2),
+                              SizedBox(height: 4),
                               Text(
-                                'Se propusieron dos nuevas clases y métodos.',
-                                style: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 11.5,
-                                ),
+                                'Las modificaciones y guardados de tus diagramas aparecerán aquí en vivo.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Color(0xFF64748B), fontSize: 11.5),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Divider(color: Color(0xFF1F2937), height: 1),
-                    ),
+                      )
+                    : Column(
+                        children: [
+                          for (int i = 0; i < _recentActivities.length && i < 4; i++) ...[
+                            if (i > 0)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Divider(color: Color(0xFF1F2937), height: 1),
+                              ),
+                            Builder(
+                              builder: (context) {
+                                final act = _recentActivities[i];
+                                final isAi = act.action.contains('AI');
+                                final isSave = act.action == 'SAVE_DIAGRAM';
+                                final icon = isAi
+                                    ? Icons.auto_awesome_rounded
+                                    : (isSave ? Icons.save_outlined : Icons.account_tree_outlined);
+                                final color = isAi
+                                    ? const Color(0xFFA855F7)
+                                    : (isSave ? const Color(0xFF10B981) : const Color(0xFF38BDF8));
 
-                    // Item 3: Mensaje en chat grupal
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0x1F38BDF8),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            color: Color(0xFF38BDF8),
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text(
-                                'Nueva actividad en el chat',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Colaboradores conectados en la sala.',
-                                style: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 11.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                                return Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () {
+                                      final target = _projects.cast<ProjectItem?>().firstWhere(
+                                            (p) => p?.id == act.projectId,
+                                            orElse: () => null,
+                                          );
+                                      if (target != null) {
+                                        _navigateToMonitor(target);
+                                      }
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 4),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: color.withOpacity(0.15),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Icon(icon, color: color, size: 18),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        act.projectName,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight: FontWeight.w800,
+                                                          fontSize: 14,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      _formatTimeAgo(act.createdAt),
+                                                      style: const TextStyle(
+                                                        color: Color(0xFF64748B),
+                                                        fontSize: 11,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      isAi ? Icons.auto_awesome : Icons.person_outline_rounded,
+                                                      color: const Color(0xFF94A3B8),
+                                                      size: 13,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Expanded(
+                                                      child: Text(
+                                                        '${act.userName} ${isSave ? "guardó cambios" : (isAi ? "generó una propuesta" : "actualizó")}',
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight: FontWeight.w600,
+                                                          fontSize: 12,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  isSave
+                                                      ? 'Guardó una nueva versión del diagrama UML.'
+                                                      : 'Nueva actividad registrada en el proyecto.',
+                                                  style: const TextStyle(
+                                                    color: Color(0xFF94A3B8),
+                                                    fontSize: 11.5,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
               ),
               const SizedBox(height: 26),
 
@@ -1537,7 +2204,12 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                       decoration: BoxDecoration(
                         color: const Color(0xFF111827),
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: const Color(0xFF1F2937), width: 1.2),
+                        border: Border.all(
+                          color: isOwner
+                              ? const Color(0x3338BDF8)
+                              : const Color(0x33A855F7),
+                          width: 1.2,
+                        ),
                       ),
                       child: Material(
                         color: Colors.transparent,
@@ -1562,28 +2234,61 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        '${isOwner ? "Dueño" : "Colaborador"} · 3 integrantes',
+                                        p.description.isNotEmpty
+                                            ? p.description
+                                            : (isOwner ? 'Creado por ti' : 'Proyecto colaborativo'),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
                                           color: Color(0xFF94A3B8),
                                           fontSize: 12,
                                         ),
                                       ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.access_time_rounded,
+                                            size: 12,
+                                            color: Color(0xFF64748B),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Actualizado: ${p.updatedAt.day.toString().padLeft(2, '0')}/${p.updatedAt.month.toString().padLeft(2, '0')}/${p.updatedAt.year}',
+                                            style: const TextStyle(
+                                              color: Color(0xFF64748B),
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ],
                                   ),
                                 ),
+                                const SizedBox(width: 10),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                   decoration: BoxDecoration(
-                                    color: const Color(0x2610B981),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: const Color(0x3310B981)),
+                                    color: isOwner
+                                        ? const Color(0x2638BDF8)
+                                        : const Color(0x26A855F7),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isOwner
+                                          ? const Color(0xFF38BDF8)
+                                          : const Color(0xFFA855F7),
+                                      width: 1,
+                                    ),
                                   ),
-                                  child: const Text(
-                                    'Activo',
+                                  child: Text(
+                                    isOwner ? 'PROPIETARIO' : 'COLABORADOR',
                                     style: TextStyle(
-                                      color: Color(0xFF10B981),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
+                                      color: isOwner
+                                          ? const Color(0xFF38BDF8)
+                                          : const Color(0xFFA855F7),
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
                                     ),
                                   ),
                                 ),
@@ -1652,6 +2357,56 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _connectSocket();
+    _fetchHistory();
+  }
+
+  Future<void> _fetchHistory() async {
+    try {
+      final url = Uri.parse('http://${widget.serverIp}:${widget.serverPort}/projects/${widget.project.id}/history');
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body);
+        if (!mounted) return;
+        final List<ActivityEvent> historyEvents = [];
+        for (final item in list) {
+          final userName = item['user']?['name']?.toString() ?? 'Colaborador';
+          final action = item['action']?.toString() ?? 'SAVE_DIAGRAM';
+          final createdAt = item['createdAt']?.toString() ?? '';
+          DateTime dt;
+          try {
+            dt = DateTime.parse(createdAt).toLocal();
+          } catch (_) {
+            dt = DateTime.now();
+          }
+          final timeStr =
+              "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}";
+          final subtitle = action == 'SAVE_DIAGRAM'
+              ? 'Guardó una versión del diagrama UML'
+              : 'Actualizó el proyecto';
+          historyEvents.add(ActivityEvent(
+            time: timeStr,
+            title: userName,
+            subtitle: subtitle,
+            isAi: false,
+          ));
+        }
+
+        setState(() {
+          for (final h in historyEvents) {
+            if (!_activities.any((a) => a.time == h.time && a.title == h.title)) {
+              _activities.add(h);
+            }
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   void _disconnectSocket() {
@@ -1802,11 +2557,20 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
         _recentNotificationIds.remove(_recentNotificationIds.first);
       }
 
-      final title = payload['title']?.toString() ?? 'Notificación del Proyecto';
-      final message = payload['message']?.toString() ??
+      final sender = payload['userName']?.toString() ??
+          payload['title']?.toString() ??
+          'Notificación del Proyecto';
+      var text = payload['message']?.toString() ??
           payload['content']?.toString() ??
           'Actualización del equipo';
       final type = payload['type']?.toString() ?? 'INFO';
+
+      if (text.startsWith('$sender ')) {
+        text = text.substring('$sender '.length).trim();
+        if (text.isNotEmpty) {
+          text = text[0].toUpperCase() + text.substring(1);
+        }
+      }
 
       IconData icon = Icons.notifications_active_outlined;
       Color accentColor = const Color(0xFF38BDF8);
@@ -1823,13 +2587,13 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
       }
 
       _showFloatingBanner(
-        title: title,
-        message: message,
+        title: sender,
+        message: text,
         icon: icon,
         accentColor: accentColor,
       );
 
-      _addActivity(title, message, isAi: type.contains('AI'));
+      _addActivity(sender, text, isAi: type.contains('AI'));
     } catch (e) {
       debugPrint("Error al procesar notificación: $e");
     }
@@ -1975,7 +2739,11 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
       final timeStr =
           "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
 
-      final wasEmpty = _classes.isEmpty;
+      // GUARDAR COPIA DEL ESTADO ANTERIOR ANTES DE REEMPLAZAR
+      final oldClasses = List<UmlClass>.from(_classes);
+      final oldEdges = List<UmlEdge>.from(_edges);
+      final wasEmpty = oldClasses.isEmpty;
+
       setState(() {
         _classes = newClasses;
         _edges = newEdges;
@@ -2002,12 +2770,30 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
       String changeDetail = '';
 
       if (!wasEmpty && payload['isInitial'] != true) {
-        final oldNames = _classes.map((c) => c.className.trim()).toSet();
+        final oldNames = oldClasses.map((c) => c.className.trim()).toSet();
         final newNames = newClasses.map((c) => c.className.trim()).toSet();
         final added = newNames.difference(oldNames).toList();
         final removed = oldNames.difference(newNames).toList();
 
-        if (added.isNotEmpty && removed.isEmpty) {
+        // 1. Detección de renombramiento de clase (mismo ID pero diferente nombre)
+        String? renamedDetail;
+        for (final nc in newClasses) {
+          final matchedById = oldClasses.firstWhere(
+            (oc) => oc.id.isNotEmpty && oc.id == nc.id,
+            orElse: () => UmlClass(id: '', className: '', attributes: [], methods: [], x: 0, y: 0),
+          );
+          if (matchedById.id.isNotEmpty &&
+              matchedById.className.trim().isNotEmpty &&
+              matchedById.className.trim() != nc.className.trim()) {
+            renamedDetail = 'Renombró clase "${matchedById.className.trim()}" a "${nc.className.trim()}"';
+            break;
+          }
+        }
+
+        if (renamedDetail != null) {
+          isSignificantChange = true;
+          changeDetail = renamedDetail;
+        } else if (added.isNotEmpty && removed.isEmpty) {
           isSignificantChange = true;
           changeDetail = added.length == 1
               ? 'Añadió la clase "${added.first}"'
@@ -2025,35 +2811,37 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
           final List<String> specificChanges = [];
 
           for (final nc in newClasses) {
-            final oc = _classes.firstWhere(
-              (c) => c.id == nc.id || c.className.trim() == nc.className.trim(),
+            final oc = oldClasses.firstWhere(
+              (c) => (c.id.isNotEmpty && c.id == nc.id) || c.className.trim() == nc.className.trim(),
               orElse: () => nc,
             );
             if (!identical(oc, nc)) {
-              final newAttrCount = nc.attributes.length;
-              final oldAttrCount = oc.attributes.length;
-              if (newAttrCount > oldAttrCount) {
-                final diff = newAttrCount - oldAttrCount;
-                specificChanges.add('Agregó $diff atributo(s) a "${nc.className}"');
-              } else if (newAttrCount < oldAttrCount) {
-                final diff = oldAttrCount - newAttrCount;
-                specificChanges.add('Eliminó $diff atributo(s) de "${nc.className}"');
+              // Comparar atributos
+              final newAttrs = nc.attributes.toSet().difference(oc.attributes.toSet()).toList();
+              final remAttrs = oc.attributes.toSet().difference(nc.attributes.toSet()).toList();
+
+              if (newAttrs.isNotEmpty) {
+                final preview = newAttrs.first.length > 25 ? '${newAttrs.first.substring(0, 22)}...' : newAttrs.first;
+                specificChanges.add('Agregó atributo "$preview" en "${nc.className}"');
+              } else if (remAttrs.isNotEmpty) {
+                specificChanges.add('Eliminó ${remAttrs.length} atributo(s) de "${nc.className}"');
               }
 
-              final newMethCount = nc.methods.length;
-              final oldMethCount = oc.methods.length;
-              if (newMethCount > oldMethCount) {
-                final diff = newMethCount - oldMethCount;
-                specificChanges.add('Agregó $diff método(s) a "${nc.className}"');
-              } else if (newMethCount < oldMethCount) {
-                final diff = oldMethCount - newMethCount;
-                specificChanges.add('Eliminó $diff método(s) de "${nc.className}"');
+              // Comparar métodos
+              final newMeths = nc.methods.toSet().difference(oc.methods.toSet()).toList();
+              final remMeths = oc.methods.toSet().difference(nc.methods.toSet()).toList();
+
+              if (newMeths.isNotEmpty) {
+                final preview = newMeths.first.length > 25 ? '${newMeths.first.substring(0, 22)}...' : newMeths.first;
+                specificChanges.add('Agregó método "$preview" en "${nc.className}"');
+              } else if (remMeths.isNotEmpty) {
+                specificChanges.add('Eliminó ${remMeths.length} método(s) de "${nc.className}"');
               }
             }
           }
 
-          if (newEdges.length != _edges.length) {
-            final diff = newEdges.length - _edges.length;
+          if (newEdges.length != oldEdges.length) {
+            final diff = newEdges.length - oldEdges.length;
             specificChanges.add(
               diff > 0 ? 'Agregó $diff relación(es)' : 'Eliminó ${-diff} relación(es)',
             );
@@ -2063,8 +2851,8 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
             isSignificantChange = true;
             changeDetail = specificChanges.take(2).join(' · ');
           } else {
-            // NO hubo cambios en clases, atributos, métodos ni relaciones:
-            // Solo fue arrastrar o reacomodar la posición (x, y) de una clase.
+            // Solo fue arrastre de posición (x, y) de una clase.
+            // NO generar actividad ni banner innecesario.
             isSignificantChange = false;
           }
         }

@@ -125,6 +125,15 @@ export class NotificationsService extends EventEmitter {
         ].filter((id) => id !== input.userId);
 
         if (recipients.length > 0) {
+          await this.prisma.notification.createMany({
+            data: recipients.map((rId) => ({
+              userId: rId,
+              projectId: input.projectId,
+              type: input.type,
+              message: input.message,
+            })),
+          });
+
           await this.sendFcmPush(
             recipients,
             `UML Studio · ${input.userName}`,
@@ -136,6 +145,33 @@ export class NotificationsService extends EventEmitter {
     } catch (err) {
       this.logger.warn(`Error al enviar FCM a la sala: ${(err as Error).message}`);
     }
+  }
+
+  async findAllForUser(userId: string, limit = 50) {
+    return this.prisma.notification.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        project: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+  }
+
+  async markAsRead(userId: string, notificationId: string) {
+    return this.prisma.notification.updateMany({
+      where: { id: notificationId, userId },
+      data: { read: true },
+    });
+  }
+
+  async markAllAsRead(userId: string) {
+    return this.prisma.notification.updateMany({
+      where: { userId, read: false },
+      data: { read: true },
+    });
   }
 
   async saveSubscription(
