@@ -32,6 +32,7 @@ model User {
   // suscripciones Web Push de sus navegadores/dispositivos.
   notifications     Notification[]
   pushSubscriptions PushSubscription[]
+  fcmDevices        FcmDevice[]
 
   @@map("users")
 }
@@ -293,4 +294,18 @@ model Relationship {
 
   @@index([diagramId])
   @@map("relationships")
+}
+
+// Dispositivos móviles registrados con Firebase Cloud Messaging (FCM)
+model FcmDevice {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("fcm_devices")
 }

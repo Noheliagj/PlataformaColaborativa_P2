@@ -4,6 +4,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/jwt-payload.interface';
 import { NotificationsService } from './notifications.service';
 import { PushSubscriptionDto } from './dto/push-subscription.dto';
+import { FcmTokenDto } from './dto/fcm-token.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
@@ -18,5 +19,11 @@ export class NotificationsController {
     @Body() dto: PushSubscriptionDto,
   ) {
     return this.notifications.saveSubscription(user.id, dto);
+  }
+
+  // POST /notifications/fcm-token -> guarda el token de Firebase del móvil
+  @Post('fcm-token')
+  saveFcmToken(@CurrentUser() user: AuthUser, @Body() dto: FcmTokenDto) {
+    return this.notifications.saveFcmToken(user.id, dto.token);
   }
 }

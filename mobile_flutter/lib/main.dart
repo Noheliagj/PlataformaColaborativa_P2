@@ -6,9 +6,45 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as socket_io;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-void main() {
+final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {}
+  debugPrint("[FCM Background] Notificación recibida: ${message.notification?.title} - ${message.notification?.body}");
+}
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // Inicializar notificaciones locales para mostrar en barra superior
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidInit);
+    await _localNotifications.initialize(initSettings);
+
+    // Crear el canal de alta importancia en Android
+    const androidChannel = AndroidNotificationChannel(
+      'uml_studio_channel',
+      'Notificaciones UML Studio',
+      description: 'Canal para alertas de diagramas guardados e IA',
+      importance: Importance.max,
+    );
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(androidChannel);
+  } catch (e) {
+    debugPrint("Firebase init: $e");
+  }
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -27,13 +63,76 @@ class UmlViewerApp extends StatefulWidget {
 
 class _UmlViewerAppState extends State<UmlViewerApp> {
   // Configuración global del servidor
-  String _serverIp = kIsWeb ? 'localhost' : '192.168.1.100';
-  String _serverPort = '3000';
+  String _serverIp = kIsWeb ? 'localhost' : '3.142.242.251';
+  String _serverPort = '80';
 
   // Sesión de autenticación
   String? _jwtToken;
   String? _userName;
   String? _userEmail;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupFcmForegroundListener();
+  }
+
+  void _setupFcmForegroundListener() {
+    try {
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        final notif = message.notification;
+        if (notif != null) {
+          _localNotifications.show(
+            notif.hashCode,
+            notif.title ?? 'UML Studio',
+            notif.body ?? 'Nueva actualización',
+            const NotificationDetails(
+              android: AndroidNotificationDetails(
+                'uml_studio_channel',
+                'Notificaciones UML Studio',
+                channelDescription: 'Canal para alertas de diagramas guardados e IA',
+                importance: Importance.max,
+                priority: Priority.high,
+                icon: '@mipmap/ic_launcher',
+              ),
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      debugPrint("FCM listener error: $e");
+    }
+  }
+
+  Future<void> _registerFcmToken(String jwtToken) async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      final settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
+        final fcmToken = await messaging.getToken();
+        if (fcmToken != null) {
+          debugPrint("[FCM] Token obtenido: $fcmToken");
+          final url = Uri.parse('http://$_serverIp:$_serverPort/notifications/fcm-token');
+          await http.post(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $jwtToken',
+            },
+            body: jsonEncode({'token': fcmToken}),
+          );
+          debugPrint("[FCM] Token registrado en el servidor AWS");
+        }
+      }
+    } catch (e) {
+      debugPrint("[FCM] Error al registrar token: $e");
+    }
+  }
 
   void _updateServerConfig(String ip, String port) {
     setState(() {
@@ -53,6 +152,7 @@ class _UmlViewerAppState extends State<UmlViewerApp> {
       _userName = name;
       _userEmail = email;
     });
+    _registerFcmToken(token);
   }
 
   void _handleLogout() {

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "441758502510",
+    "project_id": "uml-studio-notificaciones",
+    "storage_bucket": "uml-studio-notificaciones.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:441758502510:android:f937a61be7bfab7483e07f",
+        "android_client_info": {
+          "package_name": "com.example.mobile_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBj-yxleKWrCoevTfQuIb6C_3B2k-LWxKQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
