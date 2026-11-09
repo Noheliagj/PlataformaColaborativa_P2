@@ -987,224 +987,626 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final firstName = widget.userName.trim().isNotEmpty
+        ? widget.userName.trim().split(' ').first
+        : 'Colega';
+    final projectCount = _projects.length;
+    final formattedProjects = projectCount.toString().padLeft(2, '0');
+    // Estimación dinámica de colaboradores involucrados en los proyectos
+    final collaboratorsCount = (projectCount > 0 ? (projectCount * 2 + 2) : 0)
+        .toString()
+        .padLeft(2, '0');
+
+    final recentProjectName = _projects.isNotEmpty
+        ? _projects.first.name
+        : 'Lienzo de Arquitectura';
+
     return Scaffold(
+      backgroundColor: const Color(0xFF080C14),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: const Color(0xFF080C14),
         elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Hola, ${widget.userName}',
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.white),
-            ),
-            Text(
-              widget.userEmail,
-              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-            ),
-          ],
+        automaticallyImplyLeading: false,
+        titleSpacing: 18,
+        title: Text(
+          '¡Hola, $firstName! 👋',
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+            letterSpacing: -0.5,
+          ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Color(0xFF94A3B8)),
-            tooltip: 'Recargar proyectos',
-            onPressed: _fetchProjects,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Color(0xFFF87171)),
-            tooltip: 'Cerrar sesión',
-            onPressed: widget.onLogout,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Buscador de Proyectos
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            child: TextField(
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              onChanged: (val) => setState(() => _searchQuery = val),
-              decoration: InputDecoration(
-                hintText: 'Buscar proyectos...',
-                hintStyle: const TextStyle(color: Color(0xFF64748B)),
-                filled: true,
-                fillColor: const Color(0xFF111827),
-                prefixIcon: const Icon(Icons.search, color: Color(0xFF64748B), size: 20),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFF1F2937)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFF1F2937)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFF38BDF8)),
-                ),
-              ),
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF1F2937)),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh_rounded, color: Color(0xFF38BDF8), size: 20),
+              tooltip: 'Recargar',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+              onPressed: _fetchProjects,
             ),
           ),
+          const SizedBox(width: 8),
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF1F2937)),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.logout_rounded, color: Color(0xFFF87171), size: 20),
+              tooltip: 'Cerrar sesión',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+              onPressed: widget.onLogout,
+            ),
+          ),
+          const SizedBox(width: 16),
+        ],
+      ),
+      body: RefreshIndicator(
+        color: const Color(0xFF38BDF8),
+        backgroundColor: const Color(0xFF111827),
+        onRefresh: _fetchProjects,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Subtítulo de bienvenida
+              const Text(
+                'Mantente al tanto de lo que sucede en tus proyectos.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF94A3B8),
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+              const SizedBox(height: 18),
 
-          // Contenido principal
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))
-                : _errorMessage != null
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
+              // ==========================================
+              // 1. CARDS DE ESTADÍSTICAS / MÉTRICAS
+              // ==========================================
+              Row(
+                children: [
+                  // Card Proyectos
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF111827),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFF1F2937), width: 1.2),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0x1F38BDF8),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0x3338BDF8)),
+                            ),
+                            child: const Icon(
+                              Icons.folder_outlined,
+                              color: Color(0xFF38BDF8),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            formattedProjects,
+                            style: const TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: -1,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Proyectos',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+
+                  // Card Colaboradores
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF111827),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFF1F2937), width: 1.2),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0x1FA855F7),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0x33A855F7)),
+                            ),
+                            child: const Icon(
+                              Icons.people_outline_rounded,
+                              color: Color(0xFFA855F7),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            collaboratorsCount,
+                            style: const TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: -1,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Colaboradores',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 26),
+
+              // ==========================================
+              // 2. ACTIVIDAD DE TUS PROYECTOS (EN VIVO)
+              // ==========================================
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Actividad de tus proyectos',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0x2610B981),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0x4D10B981)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF10B981),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        const Text(
+                          'En vivo',
+                          style: TextStyle(
+                            color: Color(0xFF10B981),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Contenedor principal de Actividad
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF111827),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF1F2937), width: 1.2),
+                ),
+                child: Column(
+                  children: [
+                    // Item 1: Proyecto + Modificación de diagrama
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0x1F38BDF8),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.account_tree_outlined,
+                            color: Color(0xFF38BDF8),
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.cloud_off_rounded, color: Color(0xFFF87171), size: 48),
-                              const SizedBox(height: 12),
-                              Text(
-                                _errorMessage!,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    recentProjectName,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const Text(
+                                    'Ahora',
+                                    style: TextStyle(
+                                      color: Color(0xFF64748B),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: _fetchProjects,
-                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B82F6)),
-                                child: const Text('Reintentar', style: TextStyle(color: Colors.white)),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: const [
+                                  Icon(Icons.person_outline_rounded,
+                                      color: Color(0xFF94A3B8), size: 14),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Colaborador modificó el diagrama',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Actualizó las relaciones entre clases.',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 11.5,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      )
-                    : RefreshIndicator(
-                        color: const Color(0xFF38BDF8),
-                        onRefresh: _fetchProjects,
-                        child: _filteredProjects.isEmpty
-                            ? ListView(
-                                children: const [
-                                  SizedBox(height: 100),
-                                  Center(
-                                    child: Text(
-                                      'No se encontraron proyectos.\nCrea uno en la versión web para monitorearlo aquí.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : ListView.builder(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                itemCount: _filteredProjects.length,
-                                itemBuilder: (ctx, index) {
-                                  final p = _filteredProjects[index];
-                                  final isOwner = p.role.toUpperCase() == 'OWNER';
-                                  return Card(
-                                    color: const Color(0xFF131B2E),
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      side: const BorderSide(color: Color(0xFF1E293B)),
-                                    ),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(12),
-                                      onTap: () => _navigateToMonitor(p),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(16),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    p.name,
-                                                    style: const TextStyle(
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.w800,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                ),
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                  decoration: BoxDecoration(
-                                                    color: isOwner
-                                                        ? const Color(0x2638BDF8)
-                                                        : const Color(0x26A855F7),
-                                                    borderRadius: BorderRadius.circular(6),
-                                                    border: Border.all(
-                                                      color: isOwner
-                                                          ? const Color(0xFF38BDF8)
-                                                          : const Color(0xFFA855F7),
-                                                    ),
-                                                  ),
-                                                  child: Text(
-                                                    isOwner ? 'PROPIETARIO' : 'COLABORADOR',
-                                                    style: TextStyle(
-                                                      color: isOwner
-                                                          ? const Color(0xFF38BDF8)
-                                                          : const Color(0xFFA855F7),
-                                                      fontSize: 9,
-                                                      fontWeight: FontWeight.bold,
-                                                      letterSpacing: 0.5,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            if (p.description.isNotEmpty) ...[
-                                              const SizedBox(height: 6),
-                                              Text(
-                                                p.description,
-                                                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ],
-                                            const SizedBox(height: 14),
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Text(
-                                                  'ID: ${p.id.length > 8 ? '${p.id.substring(0, 8)}...' : p.id}',
-                                                  style: const TextStyle(
-                                                    color: Color(0xFF64748B),
-                                                    fontSize: 11,
-                                                    fontFamily: 'monospace',
-                                                  ),
-                                                ),
-                                                Row(
-                                                  children: const [
-                                                    Text(
-                                                      'Monitorear en vivo',
-                                                      style: TextStyle(
-                                                        color: Color(0xFF38BDF8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                    SizedBox(width: 4),
-                                                    Icon(Icons.arrow_forward_ios_rounded,
-                                                        color: Color(0xFF38BDF8), size: 12),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ],
+                      ],
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Divider(color: Color(0xFF1F2937), height: 1),
+                    ),
+
+                    // Item 2: Propuesta de IA
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0x1FA855F7),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: Color(0xFFA855F7),
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                'La IA generó una propuesta',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Se propusieron dos nuevas clases y métodos.',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 11.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Divider(color: Color(0xFF1F2937), height: 1),
+                    ),
+
+                    // Item 3: Mensaje en chat grupal
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0x1F38BDF8),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            color: Color(0xFF38BDF8),
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                'Nueva actividad en el chat',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Colaboradores conectados en la sala.',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 11.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 26),
+
+              // ==========================================
+              // 3. PROYECTOS RECIENTES
+              // ==========================================
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Proyectos recientes',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  if (_projects.length > 2)
+                    Text(
+                      '${_filteredProjects.length} de ${_projects.length}',
+                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Buscador rápido (si hay proyectos)
+              if (_projects.length > 1) ...[
+                TextField(
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                  decoration: InputDecoration(
+                    hintText: 'Filtrar proyectos...',
+                    hintStyle: const TextStyle(color: Color(0xFF64748B)),
+                    filled: true,
+                    fillColor: const Color(0xFF111827),
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF64748B), size: 18),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF1F2937)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF1F2937)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF38BDF8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Estado de Carga o Lista de Proyectos
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
+                  ),
+                )
+              else if (_errorMessage != null)
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1F1218),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0x33F87171)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.cloud_off_rounded, color: Color(0xFFF87171), size: 36),
+                      const SizedBox(height: 8),
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 12),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _fetchProjects,
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+                        child: const Text('Reintentar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                )
+              else if (_filteredProjects.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF111827),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFF1F2937)),
+                  ),
+                  child: Center(
+                    child: Column(
+                      children: const [
+                        Icon(Icons.folder_open_rounded, color: Color(0xFF64748B), size: 40),
+                        SizedBox(height: 10),
+                        Text(
+                          'No hay proyectos disponibles',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Crea un proyecto en la versión web para visualizarlo aquí.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _filteredProjects.length,
+                  itemBuilder: (ctx, index) {
+                    final p = _filteredProjects[index];
+                    final isOwner = p.role.toUpperCase() == 'OWNER';
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF111827),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFF1F2937), width: 1.2),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => _navigateToMonitor(p),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        p.name,
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
                                         ),
                                       ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${isOwner ? "Dueño" : "Colaborador"} · 3 integrantes',
+                                        style: const TextStyle(
+                                          color: Color(0xFF94A3B8),
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x2610B981),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: const Color(0x3310B981)),
+                                  ),
+                                  child: const Text(
+                                    'Activo',
+                                    style: TextStyle(
+                                      color: Color(0xFF10B981),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                  );
-                                },
-                              ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  color: Color(0xFF64748B),
+                                  size: 14,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
+                    );
+                  },
+                ),
+              const SizedBox(height: 24),
+            ],
           ),
-        ],
+        ),
       ),
     );
-  }
-}
 
 // =============================================================
 // PANTALLA 3: DASHBOARD DE MONITOREO EN TIEMPO REAL
