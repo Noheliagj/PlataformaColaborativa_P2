@@ -1995,8 +1995,10 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
           fromLower.startsWith('ai-') ||
           fromLower.contains('claude');
 
-      // Calcular detalle exacto de cambios en el lienzo
+      // Calcular detalle exacto de cambios estructurales en el lienzo
+      bool isSignificantChange = false;
       String changeDetail = '';
+
       if (!wasEmpty && payload['isInitial'] != true) {
         final oldNames = _classes.map((c) => c.className.trim()).toSet();
         final newNames = newClasses.map((c) => c.className.trim()).toSet();
@@ -2004,43 +2006,91 @@ class _DiagramViewerScreenState extends State<DiagramViewerScreen>
         final removed = oldNames.difference(newNames).toList();
 
         if (added.isNotEmpty && removed.isEmpty) {
+          isSignificantChange = true;
           changeDetail = added.length == 1
               ? 'Añadió la clase "${added.first}"'
-              : 'Añadió ${added.length} clases (${added.join(', ')})';
+              : 'Añadió ${added.length} clases (${added.join(", ")})';
         } else if (removed.isNotEmpty && added.isEmpty) {
+          isSignificantChange = true;
           changeDetail = removed.length == 1
               ? 'Eliminó la clase "${removed.first}"'
-              : 'Eliminó ${removed.length} clases (${removed.join(', ')})';
+              : 'Eliminó ${removed.length} clases (${removed.join(", ")})';
         } else if (added.isNotEmpty && removed.isNotEmpty) {
-          changeDetail = 'Añadió ${added.join(', ')} y eliminó ${removed.join(', ')}';
-        } else if (newEdges.length != _edges.length) {
-          final diff = newEdges.length - _edges.length;
-          changeDetail = diff > 0
-              ? 'Agregó $diff relación(es)'
-              : 'Eliminó ${-diff} relación(es)';
+          isSignificantChange = true;
+          changeDetail = 'Añadió ${added.join(", ")} y eliminó ${removed.join(", ")}';
         } else {
-          changeDetail = 'Modificó atributos/métodos del diagrama';
+          // Mismas clases: verificar si cambiaron atributos, métodos o relaciones
+          final List<String> specificChanges = [];
+
+          for (final nc in newClasses) {
+            final oc = _classes.firstWhere(
+              (c) => c.id == nc.id || c.className.trim() == nc.className.trim(),
+              orElse: () => nc,
+            );
+            if (!identical(oc, nc)) {
+              final newAttrCount = nc.attributes.length;
+              final oldAttrCount = oc.attributes.length;
+              if (newAttrCount > oldAttrCount) {
+                final diff = newAttrCount - oldAttrCount;
+                specificChanges.add('Agregó $diff atributo(s) a "${nc.className}"');
+              } else if (newAttrCount < oldAttrCount) {
+                final diff = oldAttrCount - newAttrCount;
+                specificChanges.add('Eliminó $diff atributo(s) de "${nc.className}"');
+              }
+
+              final newMethCount = nc.methods.length;
+              final oldMethCount = oc.methods.length;
+              if (newMethCount > oldMethCount) {
+                final diff = newMethCount - oldMethCount;
+                specificChanges.add('Agregó $diff método(s) a "${nc.className}"');
+              } else if (newMethCount < oldMethCount) {
+                final diff = oldMethCount - newMethCount;
+                specificChanges.add('Eliminó $diff método(s) de "${nc.className}"');
+              }
+            }
+          }
+
+          if (newEdges.length != _edges.length) {
+            final diff = newEdges.length - _edges.length;
+            specificChanges.add(
+              diff > 0 ? 'Agregó $diff relación(es)' : 'Eliminó ${-diff} relación(es)',
+            );
+          }
+
+          if (specificChanges.isNotEmpty) {
+            isSignificantChange = true;
+            changeDetail = specificChanges.take(2).join(' · ');
+          } else {
+            // NO hubo cambios en clases, atributos, métodos ni relaciones:
+            // Solo fue arrastrar o reacomodar la posición (x, y) de una clase.
+            isSignificantChange = false;
+          }
         }
       } else {
+        // Carga inicial
+        isSignificantChange = true;
         changeDetail = 'Sincronizado (${newClasses.length} clases, ${newEdges.length} relaciones)';
       }
 
-      final activityTitle = isAi ? 'IA: Generación / Cambio' : '$fromUser';
-      final activitySubtitle = changeDetail;
+      // Solo registrar actividad y emitir banner si fue un cambio real (no un simple arrastre de posición)
+      if (isSignificantChange) {
+        final activityTitle = isAi ? 'IA: Generación / Cambio' : '$fromUser';
+        final activitySubtitle = changeDetail;
 
-      _addActivity(
-        activityTitle,
-        activitySubtitle,
-        isAi: isAi,
-      );
-
-      if (payload['isInitial'] != true) {
-        _showFloatingBanner(
-          title: activityTitle,
-          message: activitySubtitle,
-          icon: isAi ? Icons.auto_awesome_rounded : Icons.edit_note_rounded,
-          accentColor: isAi ? const Color(0xFFA855F7) : const Color(0xFF38BDF8),
+        _addActivity(
+          activityTitle,
+          activitySubtitle,
+          isAi: isAi,
         );
+
+        if (payload['isInitial'] != true) {
+          _showFloatingBanner(
+            title: activityTitle,
+            message: activitySubtitle,
+            icon: isAi ? Icons.auto_awesome_rounded : Icons.edit_note_rounded,
+            accentColor: isAi ? const Color(0xFFA855F7) : const Color(0xFF38BDF8),
+          );
+        }
       }
     } catch (e) {
       debugPrint("Error parseando diagram-update: $e");

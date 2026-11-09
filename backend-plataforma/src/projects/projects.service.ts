@@ -358,6 +358,7 @@ export class ProjectsService {
 
     const { project } = await this.getAccessibleOrThrow(userId, id);
     let detectedChangeDetail = 'guardó cambios en el diagrama';
+    let hasStructuralChange = false;
 
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -376,8 +377,12 @@ export class ProjectsService {
         try {
           const prevClasses = await tx.classNode.findMany({
             where: { diagramId: diagram.id },
-            select: { name: true },
+            include: { attributes: true, methods: true },
           });
+          const prevRelationships = await tx.relationship.findMany({
+            where: { diagramId: diagram.id },
+          });
+
           const prevNames = new Set(prevClasses.map((c) => c.name.trim()));
           const newNames = new Set(
             (dto.nodes ?? [])
@@ -389,19 +394,74 @@ export class ProjectsService {
           const removed = [...prevNames].filter((n) => !newNames.has(n));
 
           if (added.length > 0 && removed.length === 0) {
+            hasStructuralChange = true;
             detectedChangeDetail =
               added.length === 1
                 ? `añadió la clase "${added[0]}"`
                 : `añadió ${added.length} clases (${added.join(', ')})`;
           } else if (removed.length > 0 && added.length === 0) {
+            hasStructuralChange = true;
             detectedChangeDetail =
               removed.length === 1
                 ? `eliminó la clase "${removed[0]}"`
                 : `eliminó ${removed.length} clases (${removed.join(', ')})`;
           } else if (added.length > 0 && removed.length > 0) {
+            hasStructuralChange = true;
             detectedChangeDetail = `añadió ${added.join(', ')} y eliminó ${removed.join(', ')}`;
           } else {
-            detectedChangeDetail = 'modificó la estructura o atributos del diagrama';
+            // Clases con mismos nombres: verificar cambios reales en atributos, métodos o relaciones
+            const details: string[] = [];
+
+            for (const newNode of dto.nodes ?? []) {
+              const nodeName = newNode.data?.name?.trim();
+              if (!nodeName) continue;
+              const prevClass = prevClasses.find(
+                (c) => c.name.trim() === nodeName || c.id === newNode.id,
+              );
+              if (prevClass) {
+                const newAttrs = (newNode.data?.attributes ?? [])
+                  .map((a: string) => a.trim())
+                  .filter(Boolean);
+                const prevAttrsCount = prevClass.attributes.length;
+                if (newAttrs.length > prevAttrsCount) {
+                  const diff = newAttrs.length - prevAttrsCount;
+                  details.push(`agregó ${diff} atributo(s) a "${nodeName}"`);
+                } else if (newAttrs.length < prevAttrsCount) {
+                  const diff = prevAttrsCount - newAttrs.length;
+                  details.push(`eliminó ${diff} atributo(s) de "${nodeName}"`);
+                }
+
+                const newMethods = (newNode.data?.methods ?? [])
+                  .map((m: string) => m.trim())
+                  .filter(Boolean);
+                const prevMethodsCount = prevClass.methods.length;
+                if (newMethods.length > prevMethodsCount) {
+                  const diff = newMethods.length - prevMethodsCount;
+                  details.push(`agregó ${diff} método(s) a "${nodeName}"`);
+                } else if (newMethods.length < prevMethodsCount) {
+                  const diff = prevMethodsCount - newMethods.length;
+                  details.push(`eliminó ${diff} método(s) de "${nodeName}"`);
+                }
+              }
+            }
+
+            const newEdgesCount = (dto.edges ?? []).length;
+            if (newEdgesCount !== prevRelationships.length) {
+              const diff = newEdgesCount - prevRelationships.length;
+              details.push(
+                diff > 0
+                  ? `agregó ${diff} relación(es)`
+                  : `eliminó ${-diff} relación(es)`,
+              );
+            }
+
+            if (details.length > 0) {
+              hasStructuralChange = true;
+              detectedChangeDetail = details.slice(0, 2).join(' · ');
+            } else {
+              // NO hubo ningún cambio estructural (solo se arrastró la posición X/Y de una clase)
+              hasStructuralChange = false;
+            }
           }
         } catch (_) {}
 
@@ -594,25 +654,27 @@ export class ProjectsService {
     });
     const saverName = userWhoSaved?.name ?? 'Un colaborador';
 
-    // Notifica al dueño solo cuando el cambio lo hizo un colaborador — que
-    // el propio dueño se autonotifique al guardar no aporta nada.
-    if (userId !== project.ownerId) {
-      await this.notifications.notifyOwner({
-        ownerId: project.ownerId,
+    // Notifica al dueño y a la sala solo si hubo cambios estructurales en el modelo UML
+    // (evita spam de notificaciones cuando solo se mueve o acomoda la posición de una clase)
+    if (hasStructuralChange) {
+      if (userId !== project.ownerId) {
+        await this.notifications.notifyOwner({
+          ownerId: project.ownerId,
+          projectId: id,
+          type: 'DIAGRAM_SAVED',
+          message: `${saverName} ${detectedChangeDetail} en "${project.name}"`,
+        });
+      }
+
+      // Notificación en tiempo real a todos los colaboradores y visores conectados en la sala
+      this.notifications.notifyRoom({
         projectId: id,
         type: 'DIAGRAM_SAVED',
-        message: `${saverName} ${detectedChangeDetail} en "${project.name}"`,
+        message: `${saverName} ${detectedChangeDetail}`,
+        userId,
+        userName: saverName,
       });
     }
-
-    // Notificación en tiempo real a todos los colaboradores y visores conectados en la sala
-    this.notifications.notifyRoom({
-      projectId: id,
-      type: 'DIAGRAM_SAVED',
-      message: `${saverName} ${detectedChangeDetail}`,
-      userId,
-      userName: saverName,
-    });
 
     return this.findOneAccessible(userId, id);
   }
