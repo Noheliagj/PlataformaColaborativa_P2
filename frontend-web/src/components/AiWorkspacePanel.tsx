@@ -78,6 +78,7 @@ interface SpeechRecognitionLike extends EventTarget {
   onend: (() => void) | null;
   start(): void;
   stop(): void;
+  abort(): void;
 }
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
@@ -345,18 +346,22 @@ export function AiWorkspacePanel({
   }
 
   function toggleVoice() {
+    console.log('🎤 [IA Mic] Botón presionado. Estado listening:', listening);
     setVoiceError(null);
 
     if (listening) {
+      console.log('⏹️ [IA Mic] Deteniendo reconocimiento manual por nuevo clic');
       try {
-        recognitionRef.current?.stop();
+        recognitionRef.current?.abort();
       } catch (_) {}
+      recognitionRef.current = null;
       setListening(false);
       return;
     }
 
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) {
+      console.error('❌ [IA Mic] Web Speech API no soportada');
       setVoiceError(
         'Tu navegador no soporta Web Speech API. Se recomienda usar Google Chrome o Microsoft Edge.'
       );
@@ -366,14 +371,13 @@ export function AiWorkspacePanel({
     try {
       if (recognitionRef.current) {
         try {
-          recognitionRef.current.stop();
+          recognitionRef.current.abort();
         } catch (_) {}
         recognitionRef.current = null;
       }
 
       const recognition = new Ctor();
       recognition.lang = 'es-ES';
-      // Modo discreto por elocución (sin continuous ni interimResults para máxima compatibilidad con Edge en Windows)
       recognition.continuous = false;
       recognition.interimResults = false;
 
@@ -418,13 +422,15 @@ export function AiWorkspacePanel({
 
       recognition.onend = () => {
         console.log('⏹️ [IA Mic] Micrófono finalizado');
+        recognitionRef.current = null;
         setListening(false);
       };
 
       recognitionRef.current = recognition;
       recognition.start();
     } catch (err: unknown) {
-      console.error('Error al iniciar SpeechRecognition:', err);
+      console.error('❌ [IA Mic] Error al iniciar SpeechRecognition:', err);
+      recognitionRef.current = null;
       setListening(false);
       setVoiceError(
         'No se pudo activar el reconocimiento de voz. Verifica los permisos de tu navegador.'
