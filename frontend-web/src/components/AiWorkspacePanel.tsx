@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import type { FormEvent } from 'react';
 import {
   AlertCircle,
@@ -18,6 +18,11 @@ import {
   X,
 } from 'lucide-react';
 import type { ProjectChatMessage } from '../services/projects';
+import {
+  isSpeechSupported,
+  startListening,
+  stopListening,
+} from '../utils/speechRecognition';
 
 interface AiWorkspacePanelProps {
   projectId: string;
@@ -59,36 +64,6 @@ function formatTime(iso: string): string {
   }
 }
 
-/** Soporte de voz opcional (Web Speech API) */
-interface SpeechRecognitionResultLike {
-  isFinal: boolean;
-  0: { transcript: string };
-}
-interface SpeechRecognitionEventLike extends Event {
-  results: ArrayLike<SpeechRecognitionResultLike>;
-  resultIndex: number;
-}
-interface SpeechRecognitionLike extends EventTarget {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onstart: (() => void) | null;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-}
-type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
-
-function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
-  const w = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionCtor;
-    webkitSpeechRecognition?: SpeechRecognitionCtor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
 
 interface FormattedChatMessageProps {
   content: string;
@@ -296,8 +271,7 @@ export function AiWorkspacePanel({
   const [input, setInput] = useState('');
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const [voiceSupported] = useState(() => getSpeechRecognitionCtor() !== null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const [voiceSupported] = useState(() => isSpeechSupported());
   const listRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll hacia el último mensaje
@@ -310,9 +284,7 @@ export function AiWorkspacePanel({
 
   useEffect(() => {
     return () => {
-      try {
-        recognitionRef.current?.stop();
-      } catch (_) {}
+      stopListening();
     };
   }, []);
 
@@ -345,98 +317,26 @@ export function AiWorkspacePanel({
     onSendMessage(SUMMARY_PROMPT);
   }
 
-  function toggleVoice() {
-    console.log('🎤 [IA Mic] Botón presionado. Estado listening:', listening);
+  const toggleVoice = useCallback(() => {
     setVoiceError(null);
 
     if (listening) {
-      console.log('⏹️ [IA Mic] Deteniendo reconocimiento manual por nuevo clic');
-      try {
-        recognitionRef.current?.abort();
-      } catch (_) {}
-      recognitionRef.current = null;
-      setListening(false);
+      stopListening();
       return;
     }
 
-    const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) {
-      console.error('❌ [IA Mic] Web Speech API no soportada');
-      setVoiceError(
-        'Tu navegador no soporta Web Speech API. Se recomienda usar Google Chrome o Microsoft Edge.'
-      );
-      return;
-    }
-
-    try {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (_) {}
-        recognitionRef.current = null;
-      }
-
-      const recognition = new Ctor();
-      recognition.lang = 'es-ES';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-
-      recognition.onstart = () => {
-        console.log('🎤 [IA Mic] Micrófono iniciado - esperando voz...');
-        setListening(true);
-        setVoiceError(null);
-      };
-
-      recognition.onresult = (event: any) => {
-        console.log('✅ [IA Mic] onresult recibido:', event);
-        const transcript =
-          event?.results?.[event.resultIndex]?.[0]?.transcript ||
-          event?.results?.[0]?.[0]?.transcript ||
-          '';
-        console.log('✅ [IA Mic] Texto transcrito:', transcript);
-        if (transcript.trim()) {
-          const cleanText = transcript.trim();
-          setInput((prev) => (prev ? `${prev} ${cleanText}` : cleanText));
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        const err = event?.error || 'desconocido';
-        console.warn('❌ [IA Mic] Error:', err);
-        setListening(false);
-        if (err === 'no-speech') {
-          return;
-        }
-        if (err === 'not-allowed' || err === 'service-not-allowed') {
-          setVoiceError(
-            'Permiso de micrófono bloqueado. Haz clic en el ícono junto a la URL y selecciona Permitir acceso al micrófono.'
-          );
-        } else if (err === 'audio-capture') {
-          setVoiceError('No se detectó ningún micrófono activo en tu equipo.');
-        } else if (err === 'network') {
-          setVoiceError('Error de red al procesar la voz con el servicio de reconocimiento.');
-        } else if (err !== 'aborted') {
-          setVoiceError(`Error del micrófono: ${err}`);
-        }
-      };
-
-      recognition.onend = () => {
-        console.log('⏹️ [IA Mic] Micrófono finalizado');
-        recognitionRef.current = null;
-        setListening(false);
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err: unknown) {
-      console.error('❌ [IA Mic] Error al iniciar SpeechRecognition:', err);
-      recognitionRef.current = null;
-      setListening(false);
-      setVoiceError(
-        'No se pudo activar el reconocimiento de voz. Verifica los permisos de tu navegador.'
-      );
-    }
-  }
+    startListening({
+      onTranscript: (text) => {
+        setInput((prev) => (prev ? `${prev} ${text}` : text));
+      },
+      onStateChange: (active) => {
+        setListening(active);
+      },
+      onError: (msg) => {
+        setVoiceError(msg);
+      },
+    });
+  }, [listening]);
 
   return (
     <aside className="flex h-full w-full flex-col border-r border-hairline-strong bg-surface select-text shadow-xl">

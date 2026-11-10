@@ -4,6 +4,11 @@ import { Check, Loader2, Mic, MicOff, Send, Sparkles, X } from 'lucide-react';
 import { sendAiMessage } from '../services/ai';
 import type { ChatMessage } from '../services/ai';
 import { getErrorMessage } from '../services/http-error';
+import {
+  isSpeechSupported,
+  startListening,
+  stopListening,
+} from '../utils/speechRecognition';
 
 interface DisplayMessage extends ChatMessage {
   actions?: string[];
@@ -21,41 +26,6 @@ const EXAMPLES = [
   'Crea una relación entre Cliente y Pedido',
 ];
 
-/**
- * RF18: soporte de voz vía Web Speech API. No forma parte del DOM estándar
- * de TypeScript (es experimental, con prefijo "webkit" en Chrome/Edge), así
- * que se declara aquí el subconjunto mínimo que usa este componente en vez
- * de traer una librería solo para los tipos.
- */
-interface SpeechRecognitionResultLike {
-  isFinal: boolean;
-  0: { transcript: string };
-}
-interface SpeechRecognitionEventLike extends Event {
-  results: ArrayLike<SpeechRecognitionResultLike>;
-  resultIndex: number;
-}
-interface SpeechRecognitionLike extends EventTarget {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onstart: (() => void) | null;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-}
-type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
-
-function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
-  const w = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionCtor;
-    webkitSpeechRecognition?: SpeechRecognitionCtor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
 /** RF11 - Asistente de IA: comandos en lenguaje natural sobre el diagrama. */
 export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
@@ -64,28 +34,25 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // RF18: comandos por voz (Web Speech API del navegador).
+  // RF18: comandos por voz
   const [listening, setListening] = useState(false);
-  const [voiceSupported] = useState(() => getSpeechRecognitionCtor() !== null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const [voiceSupported] = useState(() => isSpeechSupported());
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, sending]);
 
-  // Si se cierra el panel, corta cualquier reconocimiento en curso: `stop()`
-  // dispara `onend` (ver más abajo), que ya deja `listening` en false, así
-  // que no hace falta un setState síncrono aquí también.
+  // Si se cierra el panel, corta cualquier reconocimiento en curso.
   useEffect(() => {
     if (!open) {
-      recognitionRef.current?.stop();
+      stopListening();
     }
   }, [open]);
 
   // Al desmontar el componente, corta el micrófono si seguía activo.
   useEffect(() => {
     return () => {
-      recognitionRef.current?.stop();
+      stopListening();
     };
   }, []);
 
@@ -120,85 +87,27 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
 
   /**
    * RF18: al hablar, el texto se transcribe en vivo en el input; cuando el
-   * navegador entrega el resultado final, se envía automáticamente a la IA
-   * (mismo camino que si el usuario lo hubiera escrito y enviado a mano).
+   * navegador entrega el resultado final, se envía automáticamente a la IA.
    */
   function toggleListening() {
     setError(null);
+
     if (listening) {
-      try {
-        recognitionRef.current?.stop();
-      } catch (_) {}
-      setListening(false);
-      return;
-    }
-    const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) {
-      setError('Este navegador no soporta comandos por voz (usa Chrome o Edge).');
+      stopListening();
       return;
     }
 
-    try {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (_) {}
-        recognitionRef.current = null;
-      }
-
-      const recognition = new Ctor();
-      recognition.lang = 'es-ES';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-
-      recognition.onstart = () => {
-        setListening(true);
-        setError(null);
-      };
-
-      recognition.onresult = (event) => {
-        let fullTranscript = '';
-        for (let i = 0; i < event.results.length; i++) {
-          const item = event.results[i];
-          if (item && item[0]) {
-            fullTranscript += item[0].transcript;
-          }
-        }
-        const text = fullTranscript.trim() || event.results[0]?.[0]?.transcript?.trim() || '';
-        if (text) {
-          setInput((prev) => (prev ? `${prev} ${text}` : text));
-        }
-      };
-
-      recognition.onerror = (event) => {
-        const err = event.error;
-        console.warn('SpeechRecognition error:', err);
-        setListening(false);
-        if (err === 'no-speech') {
-          return;
-        }
-        if (err === 'not-allowed' || err === 'service-not-allowed') {
-          setError(
-            'Permiso de micrófono denegado. Haz clic en el ícono junto a la URL y permite el acceso al micrófono.'
-          );
-        } else if (err === 'audio-capture') {
-          setError('No se detectó ningún micrófono conectado.');
-        } else if (err !== 'aborted') {
-          setError(`No se pudo escuchar el micrófono (${err}).`);
-        }
-      };
-
-      recognition.onend = () => {
-        setListening(false);
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err) {
-      console.error(err);
-      setListening(false);
-      setError('No se pudo activar el reconocimiento de voz. Verifica los permisos de tu navegador.');
-    }
+    startListening({
+      onTranscript: (text) => {
+        setInput((prev) => (prev ? `${prev} ${text}` : text));
+      },
+      onStateChange: (active) => {
+        setListening(active);
+      },
+      onError: (msg) => {
+        setError(msg);
+      },
+    });
   }
 
   return (
